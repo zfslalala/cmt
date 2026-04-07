@@ -1,0 +1,110 @@
+# CMT - Git Commit Message 自动生成工具
+
+基于大语言模型的 Git Commit Message 自动生成工具，支持所有 OpenAI 协议兼容的大模型服务。
+
+## 功能特性
+
+- 🚀 自动生成符合 Conventional Commits 规范的提交信息
+- 🎯 支持精简模式和详细模式
+- 🔧 支持所有 OpenAI 协议兼容的大模型服务
+- ⚡ 单二进制文件，零依赖
+
+## 安装
+
+### 方式一：下载预编译版本
+
+从 [Releases](https://github.com/z/cmt/releases) 下载对应平台的版本。
+
+```bash
+# macOS/Linux
+chmod +x cmt
+sudo mv cmt /usr/local/bin/
+
+# Windows
+# 将 cmt.exe 放到 PATH 目录
+```
+
+### 方式二：从源码编译
+
+```bash
+# 克隆项目
+git clone https://github.com/z/cmt.git
+cd cmt
+
+# 编译安装
+make install
+```
+
+## 配置
+
+### 环境变量
+
+```bash
+# 必需
+export CMT_API_KEY="your-api-key"
+
+# 可选
+export CMT_API_URL="https://api.openai.com/v1"
+export CMT_MODEL="gpt-4o-mini"
+```
+
+### .env 文件
+
+在项目目录或用户主目录创建 `.cmt.env` 文件：
+
+```bash
+CMT_API_KEY=your-api-key
+CMT_API_URL=https://api.openai.com/v1
+CMT_MODEL=gpt-4o-mini
+```
+
+## 使用
+
+```bash
+# 添加变更到暂存区
+git add .
+
+# 生成 commit message（精简模式）
+cmt
+
+# 生成详细模式的 commit message
+cmt -v
+
+# 指定模型
+cmt -m gpt-4
+
+# 直接提交
+git commit -m "$(cmt)"
+```
+
+## 开发
+
+```bash
+# 安装依赖
+go mod download
+
+# 编译
+make build
+
+# 运行测试
+make test
+
+# 交叉编译
+make build-all
+
+# 打包发布
+make release
+```
+
+## 支持的模型服务
+
+- OpenAI
+- Azure OpenAI
+- 智谱 AI (GLM)
+- 通义千问
+- 文心一言
+- 其他所有兼容 OpenAI API 格式的服务
+
+## License
+
+MIT

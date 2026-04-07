@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(asdf install:*)",
+      "Bash(asdf global:*)",
+      "Bash(go version:*)",
+      "Bash(asdf set:*)",
+      "Bash(export ASDF_GOLANG_VERSION=1.24.0)",
+      "Bash(/Users/z/.asdf/installs/golang/1.24.0/bin/go version:*)",
+      "Bash(asdf list:*)"
+    ]
+  }
+}
