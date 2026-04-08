@@ -18,7 +18,14 @@
       "Bash(go build:*)",
       "Bash(git config:*)",
       "WebFetch(domain:minimax-algeng-chat-tts.oss-cn-wulanchabu.aliyuncs.com)",
-      "Bash(./cmt -e -p --help)"
+      "Bash(./cmt -e -p --help)",
+      "Bash(cp bin/cmt-darwin-arm64 ~/bin/cmt)",
+      "Bash(chmod +x ~/bin/cmt)",
+      "Bash(mkdir -p ~/bin)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(go mod:*)"
     ]
   }
 }

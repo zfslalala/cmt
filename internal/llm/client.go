@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/z/cmt/pkg/config"
+	"github.com/zfslalala/cmt/pkg/config"
 )
 
 type Client struct {

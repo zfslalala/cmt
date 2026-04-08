@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/z/cmt/internal/git"
+	"github.com/zfslalala/cmt/internal/git"
 )
 
 const systemPrompt = `你是一个专业的 Git 提交信息生成助手。

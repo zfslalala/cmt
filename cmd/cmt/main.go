@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/z/cmt/internal/git"
-	"github.com/z/cmt/internal/llm"
-	"github.com/z/cmt/internal/prompt"
-	"github.com/z/cmt/pkg/config"
+	"github.com/zfslalala/cmt/internal/git"
+	"github.com/zfslalala/cmt/internal/llm"
+	"github.com/zfslalala/cmt/internal/prompt"
+	"github.com/zfslalala/cmt/pkg/config"
 )
 
 var (
