@@ -6,6 +6,8 @@
 
 - 🚀 自动生成符合 Conventional Commits 规范的提交信息
 - 🎯 支持精简模式和详细模式
+- ✏️ 支持编辑确认后再提交
+- 📤 支持一键提交并推送到远程
 - 🔧 支持所有 OpenAI 协议兼容的大模型服务
 - ⚡ 单二进制文件，零依赖
 
@@ -61,9 +63,6 @@ CMT_MODEL=gpt-4o-mini
 ## 使用
 
 ```bash
-# 添加变更到暂存区
-git add .
-
 # 生成 commit message（精简模式）
 cmt
 
@@ -73,8 +72,14 @@ cmt -v
 # 指定模型
 cmt -m gpt-4
 
-# 直接提交
-git commit -m "$(cmt)"
+# 编辑确认后再提交
+cmt -e
+
+# 一键提交并推送
+cmt -p
+
+# 编辑确认后提交并推送（完整流程）
+cmt -e -p
 ```
 
 ## 开发
@@ -98,11 +103,13 @@ make release
 
 ## 支持的模型服务
 
+- Anthropic (Claude)
 - OpenAI
 - Azure OpenAI
 - 智谱 AI (GLM)
 - 通义千问
 - 文心一言
+- MiniMax
 - 其他所有兼容 OpenAI API 格式的服务
 
 ## License
