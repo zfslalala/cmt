@@ -44,10 +44,7 @@ make install
 ```bash
 # 必需
 export CMT_API_KEY="your-api-key"
-
-# 可选
 export CMT_API_URL="https://api.openai.com/v1"
-export CMT_MODEL="gpt-4o-mini"
 ```
 
 ### .env 文件
@@ -68,9 +65,6 @@ cmt
 
 # 生成详细模式的 commit message
 cmt -v
-
-# 指定模型
-cmt -m gpt-4
 
 # 编辑确认后再提交
 cmt -e

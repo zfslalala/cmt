@@ -15,7 +15,6 @@ import (
 
 var (
 	verbose bool
-	model   string
 	push    bool
 	edit    bool
 )
@@ -29,7 +28,6 @@ func main() {
 	}
 
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "生成详细的 commit message")
-	rootCmd.Flags().StringVarP(&model, "model", "m", "", "指定使用的模型")
 	rootCmd.Flags().BoolVarP(&push, "push", "p", false, "提交并推送到远程仓库")
 	rootCmd.Flags().BoolVarP(&edit, "edit", "e", false, "编辑 commit message 后再提交")
 
@@ -45,11 +43,6 @@ func run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "配置加载失败: %v\n", err)
 		os.Exit(1)
-	}
-
-	// 命令行参数覆盖配置
-	if model != "" {
-		cfg.Model = model
 	}
 
 	// 2. 检查是否在 Git 仓库中
