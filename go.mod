@@ -1,4 +1,4 @@
-module github.com/z/cmt
+module github.com/zfslalala/cmt
 
 go 1.21
 
