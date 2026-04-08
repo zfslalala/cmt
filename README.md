@@ -13,28 +13,63 @@
 
 ## 安装
 
-### 方式一：下载预编译版本
+### macOS / Linux
 
-从 [Releases](https://github.com/z/cmt/releases) 下载对应平台的版本。
+**方式一：下载预编译版本**
+
+从 [Releases](https://github.com/z/cmt/releases) 下载对应版本。
 
 ```bash
-# macOS/Linux
+# 解压并安装
 chmod +x cmt
 sudo mv cmt /usr/local/bin/
-
-# Windows
-# 将 cmt.exe 放到 PATH 目录
 ```
 
-### 方式二：从源码编译
+**方式二：源码编译**
 
 ```bash
-# 克隆项目
 git clone https://github.com/z/cmt.git
 cd cmt
-
-# 编译安装
 make install
+```
+
+**方式三：Go install**
+
+```bash
+go install github.com/z/cmt@latest
+```
+
+---
+
+### Windows
+
+**方式一：下载预编译版本**
+
+1. 从 [Releases](https://github.com/z/cmt/releases) 下载 `cmt-windows-amd64.exe`
+2. 改名为 `cmt.exe`
+3. 放到 `C:\Windows\System32\` 或其他 PATH 目录
+
+**方式二：源码编译**
+
+```powershell
+git clone https://github.com/z/cmt.git
+cd cmt
+go build -ldflags="-s -w" -o cmt.exe ./cmd/cmt
+# 把 cmt.exe 移到 PATH 目录
+```
+
+**方式三：Scoop**
+
+```powershell
+scoop install cmt
+```
+
+---
+
+### 验证安装
+
+```bash
+cmt --help
 ```
 
 ## 配置

@@ -120,7 +120,7 @@ func (c *Client) chatAnthropic(systemPrompt, userPrompt string) (string, error) 
 		return "", fmt.Errorf("无返回结果")
 	}
 
-	return anthropicResp.Content[0].Text, nil
+	return anthropicResp.Content[1].Text, nil
 }
 
 // OpenAI 兼容 API 调用

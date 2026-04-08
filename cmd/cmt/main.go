@@ -28,8 +28,8 @@ func main() {
 	}
 
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "生成详细的 commit message")
-	rootCmd.Flags().BoolVarP(&push, "push", "p", false, "提交并推送到远程仓库")
-	rootCmd.Flags().BoolVarP(&edit, "edit", "e", false, "编辑 commit message 后再提交")
+	rootCmd.Flags().BoolVarP(&push, "push", "p", false, "提交并推送")
+	rootCmd.Flags().BoolVarP(&edit, "edit", "e", false, "编辑后提交")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -89,7 +89,7 @@ func run(cmd *cobra.Command, args []string) {
 	// 6. 输出结果
 	fmt.Println(message)
 
-	// 7. 如果指定了 -e 参数，编辑模式
+	// 7. 如果指定了 -e 参数，允许编辑
 	if edit {
 		fmt.Println("\n请确认或修改 commit message（直接回车使用上述内容）:")
 		reader := bufio.NewReader(os.Stdin)
@@ -100,18 +100,23 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// 8. 如果指定了 -p 参数，执行 commit 和 push
-	if push {
-		fmt.Println("正在提交...")
+	// 8. 如果指定了 -e 或 -p，执行 commit
+	if edit || push {
+		fmt.Println("正在提交本地仓库...")
 		if err := git.Commit(message); err != nil {
 			fmt.Fprintf(os.Stderr, "提交失败: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("正在推送...")
+		fmt.Println("提交成功!")
+	}
+
+	// 9. 如果指定了 -p，推送到远程
+	if push {
+		fmt.Println("正在推送远程仓库...")
 		if err := git.Push(); err != nil {
 			fmt.Fprintf(os.Stderr, "推送失败: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("提交并推送成功!")
+		fmt.Println("推送成功!")
 	}
 }
