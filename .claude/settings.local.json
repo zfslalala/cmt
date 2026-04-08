@@ -15,7 +15,8 @@
       "Bash(dlv --version)",
       "Bash(dlv version:*)",
       "Bash(go get:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(git config:*)"
     ]
   }
 }

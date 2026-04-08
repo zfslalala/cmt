@@ -37,7 +37,7 @@ func main() {
 
 func run(cmd *cobra.Command, args []string) {
 	// Debug: 打印当前参数状态
-	//fmt.Printf("DEBUG: verbose=%v, model='%s', push=%v, args=%v\n", verbose, model, push, args)
+	fmt.Printf("DEBUG: verbose=%v, model='%s', push=%v, args=%v\n", verbose, model, push, args)
 
 	// 1. 加载配置
 	cfg, err := config.Load()
