@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/z/cmt/internal/git"
@@ -15,6 +17,7 @@ var (
 	verbose bool
 	model   string
 	push    bool
+	edit    bool
 )
 
 func main() {
@@ -28,6 +31,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "生成详细的 commit message")
 	rootCmd.Flags().StringVarP(&model, "model", "m", "", "指定使用的模型")
 	rootCmd.Flags().BoolVarP(&push, "push", "p", false, "提交并推送到远程仓库")
+	rootCmd.Flags().BoolVarP(&edit, "edit", "e", false, "编辑 commit message 后再提交")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -36,8 +40,13 @@ func main() {
 }
 
 func run(cmd *cobra.Command, args []string) {
+	// 清理 args 中的空格（VSCode 输入框会带前导空格）
+	for i := range args {
+		args[i] = strings.TrimSpace(args[i])
+	}
+
 	// Debug: 打印当前参数状态
-	fmt.Printf("DEBUG: verbose=%v, model='%s', push=%v, args=%v\n", verbose, model, push, args)
+	fmt.Printf("DEBUG: verbose=%v, model='%s', push=%v, edit=%v, args=%v\n", verbose, model, push, edit, args)
 
 	// 1. 加载配置
 	cfg, err := config.Load()
@@ -95,7 +104,18 @@ func run(cmd *cobra.Command, args []string) {
 	// 6. 输出结果
 	fmt.Println(message)
 
-	// 7. 如果指定了 -p 参数，执行 commit 和 push
+	// 7. 如果指定了 -e 参数，编辑模式
+	if edit {
+		fmt.Println("\n请确认或修改 commit message（直接回车使用上述内容）:")
+		reader := bufio.NewReader(os.Stdin)
+		editedMsg, _ := reader.ReadString('\n')
+		editedMsg = strings.TrimSpace(editedMsg)
+		if editedMsg != "" {
+			message = editedMsg
+		}
+	}
+
+	// 8. 如果指定了 -p 参数，执行 commit 和 push
 	if push {
 		fmt.Println("正在提交...")
 		if err := git.Commit(message); err != nil {

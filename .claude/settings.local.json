@@ -16,7 +16,9 @@
       "Bash(dlv version:*)",
       "Bash(go get:*)",
       "Bash(go build:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "WebFetch(domain:minimax-algeng-chat-tts.oss-cn-wulanchabu.aliyuncs.com)",
+      "Bash(./cmt -e -p --help)"
     ]
   }
 }
