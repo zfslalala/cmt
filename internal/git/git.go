@@ -1,6 +1,7 @@
 package git
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 )
@@ -115,4 +116,43 @@ func GetStatusSymbol(status string) string {
 		return symbol
 	}
 	return status
+}
+
+// AddAll 执行 git add . 暂存所有变更
+func AddAll() error {
+	cmd := exec.Command("git", "add", ".")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git add 失败: %v, output: %s", err, string(output))
+	}
+	return nil
+}
+
+// HasStagedChanges 检查暂存区是否有变更
+func HasStagedChanges() bool {
+	files, err := getStagedFiles()
+	if err != nil {
+		return false
+	}
+	return len(files) > 0
+}
+
+// Commit 执行 git commit
+func Commit(message string) error {
+	cmd := exec.Command("git", "commit", "-m", message)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git commit 失败: %v, output: %s", err, string(output))
+	}
+	return nil
+}
+
+// Push 执行 git push
+func Push() error {
+	cmd := exec.Command("git", "push")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git push 失败: %v, output: %s", err, string(output))
+	}
+	return nil
 }

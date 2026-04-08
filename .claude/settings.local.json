@@ -7,7 +7,15 @@
       "Bash(asdf set:*)",
       "Bash(export ASDF_GOLANG_VERSION=1.24.0)",
       "Bash(/Users/z/.asdf/installs/golang/1.24.0/bin/go version:*)",
-      "Bash(asdf list:*)"
+      "Bash(asdf list:*)",
+      "Bash(go install:*)",
+      "Bash(asdf plugin:*)",
+      "Bash(asdf which:*)",
+      "Bash(asdf dlv:*)",
+      "Bash(dlv --version)",
+      "Bash(dlv version:*)",
+      "Bash(go get:*)",
+      "Bash(go build:*)"
     ]
   }
 }

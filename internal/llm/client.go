@@ -53,7 +53,7 @@ type ChatResponse struct {
 func NewClient(cfg *config.Config) *Client {
 	return &Client{
 		config: cfg,
-		client: &http.Client{Timeout: 60 * time.Second},
+		client: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -66,13 +66,13 @@ func (c *Client) Chat(systemPrompt, userPrompt string) (string, error) {
 }
 
 func (c *Client) isAnthropicAPI() bool {
-	return len(c.config.APIBase) > 0 && 
-		(contains(c.config.APIBase, "anthropic") || 
-		 contains(c.config.APIBase, "minimaxi.com/anthropic"))
+	return len(c.config.APIBase) > 0 &&
+		(contains(c.config.APIBase, "anthropic") ||
+			contains(c.config.APIBase, "minimaxi.com/anthropic"))
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && 
+	return len(s) >= len(substr) &&
 		(s == substr || len(s) > 0 && containsHelper(s, substr))
 }
 
@@ -109,10 +109,13 @@ func (c *Client) chatAnthropic(systemPrompt, userPrompt string) (string, error) 
 	httpReq.Header.Set("x-api-key", c.config.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
+	//command, _ := http2curl.GetCurlCommand(httpReq)
+	//	fmt.Printf("%s\n", command)
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
 		return "", err
 	}
+
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -133,7 +136,7 @@ func (c *Client) chatAnthropic(systemPrompt, userPrompt string) (string, error) 
 		return "", fmt.Errorf("无返回结果")
 	}
 
-	return anthropicResp.Content[0].Text, nil
+	return anthropicResp.Content[1].Text, nil
 }
 
 // OpenAI 兼容 API 调用

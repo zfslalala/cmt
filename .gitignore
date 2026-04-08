@@ -25,6 +25,9 @@ go.work
 *.swp
 *.swo
 
+# Debug binary
+__debug_bin*
+
 # OS
 .DS_Store
 Thumbs.db
