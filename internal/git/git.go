@@ -128,15 +128,6 @@ func AddAll() error {
 	return nil
 }
 
-// HasStagedChanges 检查暂存区是否有变更
-func HasStagedChanges() bool {
-	files, err := getStagedFiles()
-	if err != nil {
-		return false
-	}
-	return len(files) > 0
-}
-
 // Commit 执行 git commit
 func Commit(message string) error {
 	cmd := exec.Command("git", "commit", "-m", message)

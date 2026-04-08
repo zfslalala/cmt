@@ -40,14 +40,6 @@ func main() {
 }
 
 func run(cmd *cobra.Command, args []string) {
-	// 清理 args 中的空格（VSCode 输入框会带前导空格）
-	for i := range args {
-		args[i] = strings.TrimSpace(args[i])
-	}
-
-	// Debug: 打印当前参数状态
-	fmt.Printf("DEBUG: verbose=%v, model='%s', push=%v, edit=%v, args=%v\n", verbose, model, push, edit, args)
-
 	// 1. 加载配置
 	cfg, err := config.Load()
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/z/cmt/pkg/config"
@@ -66,23 +67,8 @@ func (c *Client) Chat(systemPrompt, userPrompt string) (string, error) {
 }
 
 func (c *Client) isAnthropicAPI() bool {
-	return len(c.config.APIBase) > 0 &&
-		(contains(c.config.APIBase, "anthropic") ||
-			contains(c.config.APIBase, "minimaxi.com/anthropic"))
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) &&
-		(s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(c.config.APIBase, "anthropic") ||
+		strings.Contains(c.config.APIBase, "minimaxi.com/anthropic")
 }
 
 // Anthropic API 调用
@@ -109,8 +95,6 @@ func (c *Client) chatAnthropic(systemPrompt, userPrompt string) (string, error) 
 	httpReq.Header.Set("x-api-key", c.config.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
-	//command, _ := http2curl.GetCurlCommand(httpReq)
-	//	fmt.Printf("%s\n", command)
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
 		return "", err
@@ -136,7 +120,7 @@ func (c *Client) chatAnthropic(systemPrompt, userPrompt string) (string, error) 
 		return "", fmt.Errorf("无返回结果")
 	}
 
-	return anthropicResp.Content[1].Text, nil
+	return anthropicResp.Content[0].Text, nil
 }
 
 // OpenAI 兼容 API 调用
