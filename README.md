@@ -111,6 +111,19 @@ cmt -p
 cmt -e -p
 ```
 
+### 分支同步
+
+```bash
+# 将当前分支合并到 test 分支，推送 test 后回到当前分支
+gmt test
+
+# 如果 test 分支已在其他 worktree 中打开，会直接在该 worktree 中合并并推送
+gmt test
+gmt <target-branch>
+```
+
+同步前要求当前工作区没有未提交变更；如果目标分支所在 worktree 有未提交变更，也会停止执行。
+
 ## 开发
 
 ```bash
