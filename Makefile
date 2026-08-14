@@ -4,17 +4,20 @@ CMT_APP_NAME = cmt
 GMT_APP_NAME = gmt
 VERSION = 1.0.0
 BUILD_DIR = bin
+PREFIX ?= /usr/local
+BINDIR = $(PREFIX)/bin
 
 # 编译当前平台
 build:
 	mkdir -p $(BUILD_DIR)
 	go build -ldflags="-s -w" -o $(BUILD_DIR)/$(CMT_APP_NAME) ./cmd/cmt
-	go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME) ./cmd/gmt
+	ln -sf $(CMT_APP_NAME) $(BUILD_DIR)/$(GMT_APP_NAME)
 
 # 安装到系统
 install: build
-	cp $(BUILD_DIR)/$(CMT_APP_NAME) /usr/local/bin/
-	cp $(BUILD_DIR)/$(GMT_APP_NAME) /usr/local/bin/
+	mkdir -p $(BINDIR)
+	cp $(BUILD_DIR)/$(CMT_APP_NAME) $(BINDIR)/
+	ln -sf $(CMT_APP_NAME) $(BINDIR)/$(GMT_APP_NAME)
 
 # 清理编译产物
 clean:
@@ -28,15 +31,15 @@ test:
 build-all:
 	mkdir -p $(BUILD_DIR)
 	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(CMT_APP_NAME)-darwin-amd64 ./cmd/cmt
-	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-darwin-amd64 ./cmd/gmt
+	GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-darwin-amd64 ./cmd/cmt
 	GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(CMT_APP_NAME)-darwin-arm64 ./cmd/cmt
-	GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-darwin-arm64 ./cmd/gmt
+	GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-darwin-arm64 ./cmd/cmt
 	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(CMT_APP_NAME)-linux-amd64 ./cmd/cmt
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-linux-amd64 ./cmd/gmt
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-linux-amd64 ./cmd/cmt
 	GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(CMT_APP_NAME)-linux-arm64 ./cmd/cmt
-	GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-linux-arm64 ./cmd/gmt
+	GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-linux-arm64 ./cmd/cmt
 	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(CMT_APP_NAME)-windows-amd64.exe ./cmd/cmt
-	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-windows-amd64.exe ./cmd/gmt
+	GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o $(BUILD_DIR)/$(GMT_APP_NAME)-windows-amd64.exe ./cmd/cmt
 
 # 打包发布
 release: build-all

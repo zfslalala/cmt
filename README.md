@@ -122,7 +122,19 @@ gmt test
 gmt <target-branch>
 ```
 
+`gmt` 和 `cmt` 使用同一个程序；安装时会创建 `gmt -> cmt` 别名。
+
 同步前要求当前工作区没有未提交变更；如果目标分支所在 worktree 有未提交变更，也会停止执行。
+
+合并冲突时会自动回滚失败的自动合并，并提示你手动合并：
+
+- 如果目标分支没有在 worktree 中打开，`gmt` 会切到目标分支并停留在那里，提示你手动执行 `git merge <源分支>`。
+- 如果目标分支已经在 worktree 中打开，`gmt` 会提示该 worktree 的路径，你需要进入该目录手动执行 `git merge <源分支>`。
+
+```bash
+# 安装到用户目录，避免 sudo
+make install PREFIX=$HOME/.local
+```
 
 ## 开发
 
