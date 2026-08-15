@@ -17,7 +17,7 @@ type BranchInfo struct {
 func GetBranchInfo(branch string) (*BranchInfo, error) {
 	info := &BranchInfo{Branch: branch}
 
-	output, err := runGit("reflog", "show", "--date=iso", branch)
+	output, err := runGit("reflog", "show", "--date=format:%Y-%m-%d %H:%M:%S", branch)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +31,7 @@ func GetBranchInfo(branch string) (*BranchInfo, error) {
 	// 最后一行是该分支最早的活动，即创建/切出记录
 	line := lines[len(lines)-1]
 
-	// 提取日期：selector 形如 "ref@{2026-08-15 11:43:32 +0800}"
+	// 提取日期：selector 形如 "ref@{2026-08-15 11:43:32}"
 	if at := strings.Index(line, "@{"); at >= 0 {
 		if end := strings.Index(line[at:], "}"); end >= 0 {
 			info.CreatedAt = line[at+2 : at+end]
