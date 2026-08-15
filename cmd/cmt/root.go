@@ -41,7 +41,16 @@ func Execute() {
 		RunE:          runGMT,
 	}
 
-	rootCmd.AddCommand(cmtCmd, gmtCmd)
+	fromCmd := &cobra.Command{
+		Use:           "from",
+		Short:         "查看当前分支来源信息",
+		Long:          "显示当前分支的编号、来源分支与切出时间（基于 reflog 推断）。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE:          runFrom,
+	}
+
+	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		var conflictErr *git.MergeConflictError
