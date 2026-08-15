@@ -1,22 +1,21 @@
-# QG - Git Commit Message 自动生成工具
+# QG - Quick Git
 
-基于大语言模型的 Git Commit Message 自动生成工具，支持所有 OpenAI 协议兼容的大模型服务。
+快速 Git 操作工具：一条命令完成常见 Git 操作，可选接入大模型，用 AI 自动生成 commit message。
 
 ## 功能特性
 
-- 🚀 自动生成符合 Conventional Commits 规范的提交信息
-- 🎯 支持精简模式和详细模式
-- ✏️ 支持编辑确认后再提交
-- 📤 支持一键提交并推送到远程
+- ⚡ 快速分支同步：一条命令合并当前分支到目标分支并推送（`qg gmt`）
+- 🤖 AI 生成提交信息：根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message（`qg cmt`）
+- ✏️ 支持精简/详细模式、编辑确认后再提交、一键提交并推送
 - 🔧 支持所有 OpenAI 协议兼容的大模型服务
-- ⚡ 单二进制文件，零依赖
+- 🪶 单二进制文件，零依赖，纯 Git 操作无需任何配置
 
 ## 命令结构
 
 ```text
 qg
-├── cmt            生成 commit message(-v / -e / -p)
-└── gmt <branch>   将当前分支同步到目标分支并推送
+├── cmt             AI 生成 commit message（-v / -e / -p）
+└── gmt <branch>    快速分支同步：合并当前分支到目标分支并推送
 ```
 
 直接运行 `qg` 会显示命令帮助。
@@ -78,7 +77,48 @@ go build -ldflags="-s -w" -o qg.exe ./cmd
 qg --help
 ```
 
-## 配置
+## 使用
+
+### 快速分支同步（无需配置）
+
+```bash
+# 将当前分支合并到 test 分支，推送 test 后回到当前分支
+qg gmt test
+```
+
+- 如果目标分支已在其他 worktree 中打开，会直接在该 worktree 中合并并推送。
+- 同步前要求当前工作区没有未提交变更；如果目标分支所在 worktree 有未提交变更，也会停止执行。
+- 合并冲突时会自动回滚失败的自动合并，并提示你手动合并：
+  - 目标分支不在 worktree 中时，会切到目标分支并停留在那里，提示手动执行 `git merge <源分支>`。
+  - 目标分支已在 worktree 中时，会提示该 worktree 的路径，进入该目录手动执行合并。
+
+```bash
+# 安装到用户目录，避免 sudo
+make install PREFIX=$HOME/.local
+```
+
+### AI 生成 commit message（需配置）
+
+```bash
+# 生成 commit message（精简模式）
+qg cmt
+
+# 生成详细模式的 commit message
+qg cmt -v
+
+# 编辑确认后再提交
+qg cmt -e
+
+# 一键提交并推送
+qg cmt -p
+
+# 编辑确认后提交并推送（完整流程）
+qg cmt -e -p
+```
+
+暂存区为空时会自动暂存所有变更后再生成。
+
+## 配置（仅 `qg cmt` 需要）
 
 ### 配置项
 
@@ -106,47 +146,6 @@ CMT_API_URL=https://api.openai.com/v1
 CMT_MODEL=gpt-4o-mini
 ```
 
-## 使用
-
-### 生成 commit message
-
-```bash
-# 生成 commit message（精简模式）
-qg cmt
-
-# 生成详细模式的 commit message
-qg cmt -v
-
-# 编辑确认后再提交
-qg cmt -e
-
-# 一键提交并推送
-qg cmt -p
-
-# 编辑确认后提交并推送（完整流程）
-qg cmt -e -p
-```
-
-暂存区为空时会自动暂存所有变更后再生成。
-
-### 分支同步
-
-```bash
-# 将当前分支合并到 test 分支，推送 test 后回到当前分支
-qg gmt test
-```
-
-- 如果目标分支已在其他 worktree 中打开，会直接在该 worktree 中合并并推送。
-- 同步前要求当前工作区没有未提交变更；如果目标分支所在 worktree 有未提交变更，也会停止执行。
-- 合并冲突时会自动回滚失败的自动合并，并提示你手动合并：
-  - 目标分支不在 worktree 中时，会切到目标分支并停留在那里，提示手动执行 `git merge <源分支>`。
-  - 目标分支已在 worktree 中时，会提示该 worktree 的路径，进入该目录手动执行合并。
-
-```bash
-# 安装到用户目录，避免 sudo
-make install PREFIX=$HOME/.local
-```
-
 ## 开发
 
 ```bash
@@ -169,10 +168,10 @@ make release
 ### 项目结构
 
 ```text
-cmd/             入口(main.go,package main)
-cmd/cmt/         命令实现(package cmt:root 命令树 / cmt / gmt)
-internal/git     Git 命令封装(状态、变更、worktree、分支同步)
-internal/llm     LLM API 客户端(OpenAI 兼容 / Anthropic)
+cmd/             入口（main.go，package main）
+cmd/cmt/         命令实现（package cmt：root 命令树 / cmt / gmt）
+internal/git     Git 命令封装（状态、变更、worktree、分支同步）
+internal/llm     LLM API 客户端（OpenAI 兼容 / Anthropic）
 internal/prompt  Prompt 构造
 pkg/config       配置加载
 ```

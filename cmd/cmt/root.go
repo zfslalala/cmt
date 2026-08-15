@@ -13,8 +13,8 @@ import (
 func Execute() {
 	rootCmd := &cobra.Command{
 		Use:           "qg",
-		Short:         "Git 提交助手:自动生成 commit message 与分支同步",
-		Long:          "基于大语言模型的 Git Commit Message 自动生成工具，支持所有 OpenAI 协议兼容的大模型服务。",
+		Short:         "Quick Git:快速 Git 操作工具",
+		Long:          "快速 Git 操作工具，支持 AI 自动生成 commit message，兼容所有 OpenAI 协议的大模型服务。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
