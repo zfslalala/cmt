@@ -1,4 +1,4 @@
-package main
+package cmt
 
 import (
 	"errors"
@@ -9,8 +9,8 @@ import (
 	"github.com/zfslalala/cmt/internal/git"
 )
 
-// executeRoot 构建命令树并执行
-func executeRoot() {
+// Execute 构建命令树并执行
+func Execute() {
 	rootCmd := &cobra.Command{
 		Use:           "qg",
 		Short:         "Git 提交助手:自动生成 commit message 与分支同步",

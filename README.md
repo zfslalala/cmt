@@ -46,7 +46,7 @@ make install
 **方式三：Go install**
 
 ```bash
-go install github.com/zfslalala/cmt/cmd/cmt@latest
+go install github.com/zfslalala/cmt/cmd@latest
 # 安装后重命名为 qg
 mv $(go env GOPATH)/bin/cmt $(go env GOPATH)/bin/qg
 ```
@@ -66,7 +66,7 @@ mv $(go env GOPATH)/bin/cmt $(go env GOPATH)/bin/qg
 ```powershell
 git clone https://github.com/zfslalala/cmt.git
 cd cmt
-go build -ldflags="-s -w" -o qg.exe ./cmd/cmt
+go build -ldflags="-s -w" -o qg.exe ./cmd
 # 把 qg.exe 移到 PATH 目录
 ```
 
@@ -169,7 +169,8 @@ make release
 ### 项目结构
 
 ```text
-cmd/cmt/         命令入口与子命令实现(root / cmt / gmt)
+cmd/             入口(main.go,package main)
+cmd/cmt/         命令实现(package cmt:root 命令树 / cmt / gmt)
 internal/git     Git 命令封装(状态、变更、worktree、分支同步)
 internal/llm     LLM API 客户端(OpenAI 兼容 / Anthropic)
 internal/prompt  Prompt 构造
