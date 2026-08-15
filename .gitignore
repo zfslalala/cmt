@@ -1,5 +1,7 @@
 # Binaries
 bin/
+/cmt
+/qg
 *.exe
 *.exe~
 *.dll

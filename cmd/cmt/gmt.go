@@ -1,35 +1,12 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/zfslalala/cmt/internal/git"
 )
-
-func executeGMT() {
-	rootCmd := &cobra.Command{
-		Use:           "gmt <target-branch>",
-		Short:         "将当前分支同步到目标分支",
-		Long:          "将当前分支合并到目标分支，推送目标分支后回到当前分支。",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		Args:          cobra.ExactArgs(1),
-		RunE:          runGMT,
-	}
-
-	if err := rootCmd.Execute(); err != nil {
-		var conflictErr *git.MergeConflictError
-		if errors.As(err, &conflictErr) {
-			printMergeConflictInstructions(conflictErr)
-		} else {
-			fmt.Fprintf(os.Stderr, "gmt 执行失败: %v\n", err)
-		}
-		os.Exit(1)
-	}
-}
 
 func runGMT(cmd *cobra.Command, args []string) error {
 	if !git.IsGitRepo() {

@@ -19,23 +19,6 @@ var (
 	edit    bool
 )
 
-func executeCMT() {
-	rootCmd := &cobra.Command{
-		Use:           "cmt",
-		Short:         "Git Commit Message 自动生成工具",
-		Long:          "基于大语言模型的 Git Commit Message 自动生成工具，支持所有 OpenAI 协议兼容的大模型服务。",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		RunE:          runCMT,
-	}
-
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "生成详细的 commit message")
-	rootCmd.Flags().BoolVarP(&push, "push", "p", false, "提交并推送")
-	rootCmd.Flags().BoolVarP(&edit, "edit", "e", false, "编辑后提交")
-
-	returnCommandError(rootCmd.Execute())
-}
-
 func runCMT(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
