@@ -40,11 +40,12 @@ func Execute() {
 		Args:          cobra.ExactArgs(1),
 		RunE:          runGMT,
 	}
+	gmtCmd.Flags().BoolVarP(&buildFlag, "build", "b", false, "推送成功后触发构建（读取仓库根 qg.json）")
 
 	fromCmd := &cobra.Command{
 		Use:           "from",
 		Short:         "查看当前分支来源信息",
-		Long:          "显示当前分支的编号、来源分支与切出时间（基于 reflog 推断）。",
+		Long:          "显示当前分支的来源分支与切出时间（基于 reflog 推断）。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE:          runFrom,

@@ -86,6 +86,10 @@ func SyncBranchFromCurrent(targetBranch string) (err error) {
 		return fmt.Errorf("目标分支不能为空")
 	}
 
+	if !branchExists(targetBranch) {
+		return fmt.Errorf("目标分支 %s 不存在，请确认分支名", targetBranch)
+	}
+
 	currentBranch, err := CurrentBranch()
 	if err != nil {
 		return err
@@ -133,7 +137,10 @@ func SyncBranchFromCurrent(targetBranch string) (err error) {
 		return fmt.Errorf("合并 %s 到 %s 失败: %w", currentBranch, targetBranch, err)
 	}
 
-	return pushBranch(defaultRemote, targetBranch)
+	if err := pushBranch(defaultRemote, targetBranch); err != nil {
+		return fmt.Errorf("合并已完成，但推送 %s 失败: %w\n目标分支 %s 上已有未推送的合并提交，请处理后再手动执行 git push origin %s", targetBranch, err, targetBranch, targetBranch)
+	}
+	return nil
 }
 
 func syncInWorktree(worktreePath, sourceBranch, targetBranch string) error {
@@ -154,7 +161,10 @@ func syncInWorktree(worktreePath, sourceBranch, targetBranch string) error {
 		return fmt.Errorf("在 worktree %s 合并 %s 到 %s 失败: %w", worktreePath, sourceBranch, targetBranch, err)
 	}
 
-	return pushBranchInDir(worktreePath, defaultRemote, targetBranch)
+	if err := pushBranchInDir(worktreePath, defaultRemote, targetBranch); err != nil {
+		return fmt.Errorf("合并已完成，但推送 %s 失败: %w\nworktree %s 的 %s 分支上已有未推送的合并提交，请处理后再手动执行 git push origin %s", targetBranch, err, worktreePath, targetBranch, targetBranch)
+	}
+	return nil
 }
 
 func requireCleanWorktree(dir string) error {
@@ -174,6 +184,12 @@ func requireCleanWorktree(dir string) error {
 func hasMergeConflicts(dir string) bool {
 	output, err := runGitInDir(dir, "diff", "--name-only", "--diff-filter=U")
 	return err == nil && strings.TrimSpace(output) != ""
+}
+
+// branchExists 检查本地分支是否存在
+func branchExists(branch string) bool {
+	_, err := runGit("rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	return err == nil
 }
 
 func checkoutBranch(branch string) error {

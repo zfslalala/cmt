@@ -36,8 +36,9 @@ func Load() (*Config, error) {
 }
 
 func loadEnvFiles() {
-	// .env 文件路径列表（按优先级从低到高）
-	// 后续加载的文件会覆盖之前的值，但不会覆盖已存在的系统环境变量
+	// .env 文件路径列表（按加载顺序）
+	// 注意:godotenv.Load 不会覆盖已存在的环境变量,因此先加载的文件优先生效。
+	// 实际优先级:系统环境变量 > ~/.cmt.env > ~/.env > 当前目录 .env
 	locations := []string{
 		filepath.Join(os.Getenv("HOME"), ".cmt.env"), // 用户 home 目录
 		filepath.Join(os.Getenv("HOME"), ".env"),     // 用户 home 目录

@@ -23,7 +23,7 @@ func GetBranchInfo(branch string) (*BranchInfo, error) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) == 0 {
+	if len(lines) == 0 || lines[0] == "" {
 		return info, nil
 	}
 	info.HasLog = true
