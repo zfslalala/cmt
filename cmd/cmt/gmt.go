@@ -55,13 +55,14 @@ func triggerBuilds(branch string) {
 	fmt.Printf("正在触发 %s 构建（%d 个命令）...\n", branch, total)
 
 	success := 0
-	for i, cmdStr := range entry.Curl {
+	for i, rawCmd := range entry.Curl {
+		cmdStr := build.EnsureFailFlag(rawCmd)
 		if err := build.RunCommand(cmdStr); err != nil {
 			fmt.Fprintf(os.Stderr, "✗ [%d/%d] 执行失败: %v\n    命令: %s\n", i+1, total, err, cmdStr)
 			continue
 		}
 		success++
-		fmt.Printf("✓ [%d/%d] %s\n", i+1, total, cmdStr)
+		fmt.Printf("✓ [%d/%d] 完成\n", i+1, total)
 	}
 
 	if success < total {

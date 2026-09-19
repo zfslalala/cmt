@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/hjson/hjson-go/v4"
@@ -60,6 +61,16 @@ func (c *Config) EntryFor(branch string) (Entry, bool) {
 		return Entry{}, false
 	}
 	return entry, true
+}
+
+// EnsureFailFlag 给 curl 命令注入 -f(--fail),使 HTTP 4xx/5xx 判定为失败
+// (curl 退出码变 22)。非 curl 开头的命令原样返回,按退出码判定。
+func EnsureFailFlag(cmdStr string) string {
+	trimmed := strings.TrimLeft(cmdStr, " \t")
+	if !strings.HasPrefix(trimmed, "curl ") && trimmed != "curl" {
+		return cmdStr
+	}
+	return "curl -f" + strings.TrimPrefix(trimmed, "curl")
 }
 
 // RunCommand 通过 shell 执行单条命令(兼容 Windows)。
