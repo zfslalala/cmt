@@ -36,18 +36,18 @@ func runGMT(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// triggerBuilds 依次执行 qg.json 中目标分支的构建命令。
+// triggerBuilds 依次执行 qg.hjson 中目标分支的构建命令。
 // 单条失败仅警告并继续执行后续命令,不影响已完成的合并推送结果。
 func triggerBuilds(branch string) {
 	cfg, err := build.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "⚠ 读取 qg.json 失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "⚠ 读取 qg.hjson 失败: %v\n", err)
 		return
 	}
 
 	entry, ok := cfg.EntryFor(branch)
 	if !ok {
-		fmt.Printf("qg.json 中未配置 %s 的构建命令，跳过触发\n", branch)
+		fmt.Printf("qg.hjson 中未配置 %s 的构建命令，跳过触发\n", branch)
 		return
 	}
 

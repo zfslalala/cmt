@@ -40,7 +40,7 @@ func Execute() {
 		Args:          cobra.ExactArgs(1),
 		RunE:          runGMT,
 	}
-	gmtCmd.Flags().BoolVarP(&buildFlag, "build", "b", false, "推送成功后触发构建（读取仓库根 qg.json）")
+	gmtCmd.Flags().BoolVarP(&buildFlag, "build", "b", false, "推送成功后触发构建（读取仓库根 qg.hjson）")
 
 	fromCmd := &cobra.Command{
 		Use:           "from",

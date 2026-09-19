@@ -2,7 +2,6 @@ package build
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,10 +9,11 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/hjson/hjson-go/v4"
 	"github.com/zfslalala/cmt/internal/git"
 )
 
-// Config 对应仓库根 qg.json 的结构
+// Config 对应仓库根 qg.hjson 的结构
 type Config struct {
 	Builds map[string]Entry `json:"builds"`
 }
@@ -26,14 +26,16 @@ type Entry struct {
 // commandTimeout 单条命令的超时时间
 const commandTimeout = 30 * time.Second
 
-// Load 从 git 仓库根读取 qg.json;文件不存在时返回 (nil, nil)
+// Load 从 git 仓库根读取 qg.hjson;文件不存在时返回 (nil, nil)。
+// 使用 HJSON 解析(JSON 超集):兼容标准 JSON 写法,
+// 并支持 ''' 多行字符串,可直接粘贴浏览器复制的 curl 命令而无需转义。
 func Load() (*Config, error) {
 	root, err := git.RepoRoot()
 	if err != nil {
 		return nil, fmt.Errorf("定位仓库根失败: %w", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(root, "qg.json"))
+	data, err := os.ReadFile(filepath.Join(root, "qg.hjson"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -42,8 +44,8 @@ func Load() (*Config, error) {
 	}
 
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("解析 qg.json 失败: %w", err)
+	if err := hjson.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("解析 qg.hjson 失败: %w", err)
 	}
 	return &cfg, nil
 }

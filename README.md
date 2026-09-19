@@ -86,7 +86,7 @@ qg --help
 # 将当前分支合并到 test 分支，推送 test 后回到当前分支
 qg gmt test
 
-# 合并推送后触发构建（执行 qg.json 中配置的 curl 命令）
+# 合并推送后触发构建（执行 qg.hjson 中配置的 curl 命令）
 qg gmt test -b
 ```
 
@@ -98,7 +98,7 @@ qg gmt test -b
 
 #### 构建触发（`-b`）
 
-加 `-b` 后，推送成功会依次执行项目根 `qg.json` 中该分支配置的命令（通常是 curl 调用 CI）：
+加 `-b` 后，推送成功会依次执行项目根 `qg.hjson` 中该分支配置的命令（通常是 curl 调用 CI）：
 
 ```json
 {
@@ -120,7 +120,24 @@ qg gmt test -b
 
 - `curl` 数组中的命令会**依次执行**；单条失败会明确告知（含命令与错误），并继续执行后续命令。
 - 构建触发失败只警告，不影响已完成的合并推送，退出码仍为 0。
-- 分支未配置时提示跳过；`qg.json` 已加入 `.gitignore`，token 不会入库。
+- 分支未配置时提示跳过；`qg.hjson` 已加入 `.gitignore`，token 不会入库。
+
+`qg.hjson` 采用 HJSON 解析（JSON 超集），标准 JSON 写法完全兼容，同时支持 `'''` 多行字符串——浏览器「复制为 cURL」的内容可以**原样粘贴，无需转义**：
+
+```hjson
+{
+  builds: {
+    main: {
+      curl: ['''
+      curl --url 'https://ci.example.com/build?token=xxx' \
+        -H 'Accept: */*' \
+        -b 'SESSION=abc123' \
+        -H 'User-Agent: Mozilla/5.0 ...'
+      ''']
+    }
+  }
+}
+```
 
 ```bash
 # 安装到用户目录，避免 sudo
@@ -218,7 +235,7 @@ make release
 cmd/             入口（main.go，package main）
 cmd/cmt/         命令实现（package cmt：root 命令树 / cmt / gmt / from）
 internal/git     Git 命令封装（状态、变更、worktree、分支同步）
-internal/build   构建触发（qg.json 解析 + 命令执行）
+internal/build   构建触发（qg.hjson 解析 + 命令执行）
 internal/llm     LLM API 客户端（OpenAI 兼容 / Anthropic）
 internal/prompt  Prompt 构造
 pkg/config       配置加载
