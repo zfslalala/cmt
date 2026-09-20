@@ -12,6 +12,15 @@ func IsGitRepo() bool {
 	return err == nil && strings.TrimSpace(output) == "true"
 }
 
+// RepoRoot 获取当前 git 仓库的根目录
+func RepoRoot() (string, error) {
+	output, err := runGit("rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
 // CurrentBranch 获取当前分支名
 func CurrentBranch() (string, error) {
 	output, err := runGit("branch", "--show-current")
