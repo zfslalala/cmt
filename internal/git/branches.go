@@ -124,6 +124,16 @@ func SyncBranchFromCurrent(targetBranch string) (err error) {
 		}
 	}()
 
+	// 合并前先将目标分支同步到远程最新
+	if err := pullLatest(""); err != nil {
+		if hasMergeConflicts("") {
+			_ = abortPull("")
+			restoreSource = false
+			return &MergeConflictError{SourceBranch: defaultRemote + "/" + targetBranch, TargetBranch: targetBranch, Cause: err}
+		}
+		return fmt.Errorf("拉取 %s 分支最新代码失败: %w", targetBranch, err)
+	}
+
 	if err := mergeBranch(currentBranch); err != nil {
 		if hasMergeConflicts("") {
 			_ = abortMerge()
@@ -139,6 +149,20 @@ func SyncBranchFromCurrent(targetBranch string) (err error) {
 func syncInWorktree(worktreePath, sourceBranch, targetBranch string) error {
 	if err := requireCleanWorktree(worktreePath); err != nil {
 		return fmt.Errorf("目标分支 %s 所在 worktree 不干净: %w，路径: %s", targetBranch, err, worktreePath)
+	}
+
+	// 合并前先将 worktree 中的目标分支同步到远程最新
+	if err := pullLatest(worktreePath); err != nil {
+		if hasMergeConflicts(worktreePath) {
+			_ = abortPull(worktreePath)
+			return &MergeConflictError{
+				SourceBranch: defaultRemote + "/" + targetBranch,
+				TargetBranch: targetBranch,
+				WorktreePath: worktreePath,
+				Cause:        err,
+			}
+		}
+		return fmt.Errorf("拉取目标分支 %s 最新代码失败: %w", targetBranch, err)
 	}
 
 	if err := mergeBranchInDir(worktreePath, sourceBranch); err != nil {
@@ -205,5 +229,29 @@ func pushBranch(remote, branch string) error {
 
 func pushBranchInDir(dir, remote, branch string) error {
 	_, err := runGitInDir(dir, "push", remote, branch)
+	return err
+}
+
+// pullLatest 将 dir 中当前分支与远程同步（git pull）。
+// 分支未配置 upstream（如本地新分支）时跳过，返回 nil。
+func pullLatest(dir string) error {
+	hasUpstream, err := branchHasUpstreamInDir(dir)
+	if err != nil {
+		return err
+	}
+	if !hasUpstream {
+		return nil
+	}
+
+	_, err = runGitInDir(dir, "pull")
+	return err
+}
+
+// abortPull 回滚 pull 失败留下的冲突状态（兼容 merge 与 rebase 两种冲突模式）。
+func abortPull(dir string) error {
+	if _, err := runGitInDir(dir, "merge", "--abort"); err == nil {
+		return nil
+	}
+	_, err := runGitInDir(dir, "rebase", "--abort")
 	return err
 }

@@ -44,10 +44,39 @@ func Commit(message string) error {
 	return err
 }
 
-// Push 执行 git push
+// Push 执行 git push；若当前分支尚未设置 upstream，则自动使用 -u 推送并绑定
 func Push() error {
-	_, err := runGit("push")
+	branch, err := CurrentBranch()
+	if err != nil {
+		return err
+	}
+
+	hasUpstream, err := branchHasUpstream()
+	if err != nil {
+		return err
+	}
+
+	if hasUpstream {
+		_, err = runGit("push")
+		return err
+	}
+
+	_, err = runGit("push", "-u", defaultRemote, branch)
 	return err
+}
+
+// branchHasUpstream 检查当前分支是否配置了 upstream
+func branchHasUpstream() (bool, error) {
+	return branchHasUpstreamInDir("")
+}
+
+// branchHasUpstreamInDir 检查指定目录中当前分支是否配置了 upstream
+func branchHasUpstreamInDir(dir string) (bool, error) {
+	_, err := runGitInDir(dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 func hasUncommittedChangesInDir(dir string) (bool, error) {

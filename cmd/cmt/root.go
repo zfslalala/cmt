@@ -34,7 +34,7 @@ func Execute() {
 	gmtCmd := &cobra.Command{
 		Use:           "gmt <target-branch>",
 		Short:         "将当前分支同步到目标分支",
-		Long:          "将当前分支合并到目标分支，推送目标分支后回到当前分支。",
+		Long:          "将目标分支同步到远程最新，再把当前分支合并进去，推送目标分支后回到当前分支。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Args:          cobra.ExactArgs(1),
@@ -50,7 +50,17 @@ func Execute() {
 		RunE:          runFrom,
 	}
 
-	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd)
+	pCmd := &cobra.Command{
+		Use:           "p <提交备注>",
+		Short:         "提交所有修改并推送",
+		Long:          "将本地所有修改暂存并提交到本地仓库，然后推送到远程，提交信息为指定备注。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.MinimumNArgs(1),
+		RunE:          runP,
+	}
+
+	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		var conflictErr *git.MergeConflictError
