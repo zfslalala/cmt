@@ -20,6 +20,7 @@ go.work
 # Environment files
 .env
 .cmt.env
+qg.hjson
 
 # IDE
 .idea/

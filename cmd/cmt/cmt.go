@@ -3,6 +3,7 @@ package cmt
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -26,7 +27,7 @@ func runCMT(cmd *cobra.Command, args []string) error {
 	}
 
 	if !git.IsGitRepo() {
-		return fmt.Errorf("错误: 当前目录不是 Git 仓库")
+		return fmt.Errorf("当前目录不是 Git 仓库")
 	}
 
 	changes, err := git.GetStagedChanges()
@@ -47,7 +48,10 @@ func runCMT(cmd *cobra.Command, args []string) error {
 		if len(changes.Files) == 0 {
 			return fmt.Errorf("暂存后仍未检测到变更")
 		}
-		fmt.Printf("已暂存 %d 个文件\n", len(changes.Files))
+		fmt.Printf("已暂存 %d 个文件:\n", len(changes.Files))
+		for _, file := range changes.Files {
+			fmt.Printf("  %s %s\n", git.GetStatusSymbol(file.Status), file.NewPath)
+		}
 	}
 
 	client := llm.NewClient(cfg)
@@ -61,7 +65,7 @@ func runCMT(cmd *cobra.Command, args []string) error {
 		fmt.Println("\n请确认或修改 commit message（直接回车使用上述内容）:")
 		reader := bufio.NewReader(os.Stdin)
 		editedMessage, err := reader.ReadString('\n')
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return fmt.Errorf("读取编辑后的 commit message 失败: %w", err)
 		}
 		editedMessage = strings.TrimSpace(editedMessage)
