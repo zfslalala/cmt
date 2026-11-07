@@ -54,13 +54,14 @@ func Execute() {
 	wtCmd := &cobra.Command{
 		Use:           "wt <branch>",
 		Short:         "创建分支和工作树",
-		Long:          "基于当前 HEAD 创建新分支，并在当前目录的同级目录创建对应工作树，可用 -i 在 IntelliJ IDEA 中打开。",
+		Long:          "基于当前 HEAD 创建新分支，并在当前目录的同级目录创建对应工作树，可用 -i 在 IntelliJ IDEA 中打开，-w 在 WorkBuddy 中打开。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Args:          cobra.ExactArgs(1),
 		RunE:          runWt,
 	}
 	wtCmd.Flags().BoolVarP(&wtOpenIdea, "idea", "i", false, "创建后在 IntelliJ IDEA 中打开工作树")
+	wtCmd.Flags().BoolVarP(&wtOpenWorkBuddy, "workbuddy", "w", false, "创建后在 WorkBuddy 中打开工作树（新任务草稿）")
 
 	runCmd := &cobra.Command{
 		Use:                "run <脚本> [参数...]",

@@ -8,9 +8,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/idea"
+	"github.com/zfslalala/cmt/internal/workbuddy"
 )
 
 var wtOpenIdea bool
+var wtOpenWorkBuddy bool
 
 // runWt 创建新分支与对应工作树，可用 -i 在 IntelliJ IDEA 中打开
 func runWt(cmd *cobra.Command, args []string) error {
@@ -28,17 +30,25 @@ func runWt(cmd *cobra.Command, args []string) error {
 	fmt.Printf("工作树已创建: %s\n", path)
 	fmt.Printf("分支: %s\n", branch)
 
-	if !wtOpenIdea {
-		return nil
+	if wtOpenIdea {
+		if err := idea.Open(path); err != nil {
+			if errors.Is(err, idea.ErrNotFound) {
+				fmt.Fprintln(os.Stderr, "未检测到 IntelliJ IDEA，已跳过打开")
+			} else {
+				return err
+			}
+		} else {
+			fmt.Println("已使用 IntelliJ IDEA 打开工作树")
+		}
 	}
 
-	if err := idea.Open(path); err != nil {
-		if errors.Is(err, idea.ErrNotFound) {
-			fmt.Fprintln(os.Stderr, "未检测到 IntelliJ IDEA，已跳过打开")
-			return nil
+	if wtOpenWorkBuddy {
+		if err := workbuddy.OpenTask(path, ""); err != nil {
+			// 工作树已创建成功，打开失败只警告不报错
+			fmt.Fprintln(os.Stderr, err)
+		} else {
+			fmt.Println("已用 WorkBuddy 打开工作树（新任务草稿）")
 		}
-		return err
 	}
-	fmt.Println("已使用 IntelliJ IDEA 打开工作树")
 	return nil
 }
