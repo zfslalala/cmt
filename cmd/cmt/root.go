@@ -51,6 +51,17 @@ func Execute() {
 		RunE:          runFrom,
 	}
 
+	wtCmd := &cobra.Command{
+		Use:           "wt <branch>",
+		Short:         "创建分支和工作树",
+		Long:          "基于当前 HEAD 创建新分支，并在当前目录的同级目录创建对应工作树，可用 -i 在 IntelliJ IDEA 中打开。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.ExactArgs(1),
+		RunE:          runWt,
+	}
+	wtCmd.Flags().BoolVarP(&wtOpenIdea, "idea", "i", false, "创建后在 IntelliJ IDEA 中打开工作树")
+
 	pCmd := &cobra.Command{
 		Use:           "p <提交备注>",
 		Short:         "提交所有修改并推送",
@@ -61,7 +72,7 @@ func Execute() {
 		RunE:          runP,
 	}
 
-	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd)
+	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd, wtCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		var conflictErr *git.MergeConflictError
