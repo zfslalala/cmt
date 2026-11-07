@@ -52,10 +52,14 @@ func CreateWorktree(branch string) (string, error) {
 	return target, nil
 }
 
-// SanitizeBranchName 将分支名转换为安全目录名（/ \ 空格转成 -）
+// SanitizeBranchName 将分支名转换为安全的目录名。
+// 除了 / \ 空格，还替换 Windows 文件名的非法字符 : < > " | ? *，
+// 保证同一个分支在 macOS 与 Windows 上生成相同且合法的目录名。
 func SanitizeBranchName(branch string) string {
-	name := strings.ReplaceAll(branch, "/", "-")
-	name = strings.ReplaceAll(name, "\\", "-")
-	name = strings.ReplaceAll(name, " ", "-")
-	return name
+	replacer := strings.NewReplacer(
+		"/", "-", "\\", "-", " ", "-",
+		":", "-", "<", "-", ">", "-",
+		"\"", "-", "|", "-", "?", "-", "*", "-",
+	)
+	return replacer.Replace(branch)
 }

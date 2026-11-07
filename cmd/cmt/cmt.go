@@ -62,13 +62,11 @@ func runCMT(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(message)
 	if edit {
-		fmt.Println("\n请确认或修改 commit message（直接回车使用上述内容）:")
-		reader := bufio.NewReader(os.Stdin)
-		editedMessage, err := reader.ReadString('\n')
-		if err != nil && err != io.EOF {
+		fmt.Println("\n请确认或修改 commit message（直接回车使用上述内容；输入新内容后以空行结束）:")
+		editedMessage, err := readMultiline(os.Stdin)
+		if err != nil {
 			return fmt.Errorf("读取编辑后的 commit message 失败: %w", err)
 		}
-		editedMessage = strings.TrimSpace(editedMessage)
 		if editedMessage != "" {
 			message = editedMessage
 		}
@@ -91,4 +89,24 @@ func runCMT(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// readMultiline 从 r 读取多行输入，空行或 EOF 结束。
+// 返回去掉首尾空白的拼接内容；未输入任何内容时返回空串。
+func readMultiline(r io.Reader) (string, error) {
+	scanner := bufio.NewScanner(r)
+	var lines []string
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" && len(lines) > 0 {
+			break
+		}
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	return strings.Join(lines, "\n"), nil
 }

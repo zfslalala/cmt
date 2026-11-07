@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zfslalala/cmt/internal/build"
+	"github.com/zfslalala/cmt/internal/proc"
 )
 
 // ScriptsDir 返回脚本目录：QG_SCRIPTS_DIR 环境变量优先，否则 ~/.qg/scripts
@@ -88,7 +88,7 @@ func Run(scriptPath string, args []string, timeout time.Duration) (int, error) {
 
 	buildCmd := exec.Command(goBin, "build", "-o", binPath, absPath)
 	buildCmd.Stderr = os.Stderr // 编译错误实时显示
-	build.SetProcessGroup(buildCmd)
+	proc.SetProcessGroup(buildCmd)
 	if err := buildCmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
@@ -101,7 +101,7 @@ func Run(scriptPath string, args []string, timeout time.Duration) (int, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	build.SetProcessGroup(cmd)
+	proc.SetProcessGroup(cmd)
 
 	if err := cmd.Start(); err != nil {
 		return 1, fmt.Errorf("启动脚本失败: %w", err)
@@ -132,7 +132,7 @@ func waitWithTimeout(cmd *exec.Cmd, timeout time.Duration) error {
 	case err := <-waitErr:
 		return err
 	case <-time.After(timeout):
-		build.KillProcessGroup(cmd)
+		proc.KillProcessGroup(cmd)
 		<-waitErr
 		return fmt.Errorf("脚本超时(%s)，已终止", timeout)
 	}

@@ -1,6 +1,8 @@
 package git
 
 import (
+	"bytes"
+	"fmt"
 	"os/exec"
 	"strings"
 )
@@ -31,50 +33,67 @@ func GetStagedChanges() (*StagedChanges, error) {
 	return &StagedChanges{Files: files, DiffContent: diff}, nil
 }
 
+// runGitOutput 执行 git 命令并返回 stdout，stderr 单独捕获用于错误信息
+func runGitOutput(args ...string) (string, error) {
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command("git", args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git %s 失败: %v, stderr: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
+}
+
+// getStagedFiles 获取暂存区文件列表。
+// 用 -z NUL 分隔格式解析，兼容路径含空格的情况；
+// 重命名/复制的状态带相似度分数（如 R100），归一为单个字母。
 func getStagedFiles() ([]FileChange, error) {
-	cmd := exec.Command("git", "diff", "--cached", "--name-status", "--diff-filter=ACDMRT")
-	output, err := cmd.Output()
+	output, err := runGitOutput("diff", "--cached", "--name-status", "-z", "--diff-filter=ACDMRT")
 	if err != nil {
 		return nil, err
 	}
 
+	tokens := strings.Split(output, "\x00")
 	var files []FileChange
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, line := range lines {
-		if line == "" {
+	for i := 0; i < len(tokens); {
+		tok := tokens[i]
+		if tok == "" {
+			i++
 			continue
 		}
-
-		parts := strings.Fields(line)
-		if len(parts) < 2 {
-			continue
+		status := tok
+		if len(status) > 1 && status[1] >= '0' && status[1] <= '9' {
+			status = status[:1]
 		}
+		i++
 
-		status := parts[0]
-		change := FileChange{Status: status}
-		if status == "R" || status == "C" {
-			if len(parts) >= 3 {
-				change.OldPath = parts[1]
-				change.NewPath = parts[2]
+		switch status {
+		case "R", "C":
+			if i+1 < len(tokens) {
+				files = append(files, FileChange{Status: status, OldPath: tokens[i], NewPath: tokens[i+1]})
+				i += 2
+			} else {
+				i = len(tokens)
 			}
-		} else {
-			change.NewPath = parts[1]
+		default:
+			if i < len(tokens) {
+				files = append(files, FileChange{Status: status, NewPath: tokens[i]})
+				i++
+			}
 		}
-
-		files = append(files, change)
 	}
 
 	return files, nil
 }
 
 func getStagedDiff() (string, error) {
-	cmd := exec.Command("git", "diff", "--cached")
-	output, err := cmd.Output()
+	output, err := runGitOutput("diff", "--cached")
 	if err != nil {
 		return "", err
 	}
 
-	lines := strings.Split(string(output), "\n")
+	lines := strings.Split(output, "\n")
 	if len(lines) > 500 {
 		lines = append(lines[:500], "... (diff 内容过长，已截断)")
 	}

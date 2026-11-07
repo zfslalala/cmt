@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/hjson/hjson-go/v4"
 	"github.com/zfslalala/cmt/internal/git"
+	"github.com/zfslalala/cmt/internal/proc"
 )
 
 // Config 对应仓库根 qg.hjson 的结构
@@ -72,16 +72,6 @@ func EnsureFailFlag(cmdStr string) string {
 	return "curl -f" + strings.TrimPrefix(trimmed, "curl")
 }
 
-// SetProcessGroup 将命令放入独立进程组（供其他包复用）
-func SetProcessGroup(cmd *exec.Cmd) {
-	setProcessGroup(cmd)
-}
-
-// KillProcessGroup 终止命令所在的整个进程组（供其他包复用）
-func KillProcessGroup(cmd *exec.Cmd) {
-	killProcessGroup(cmd)
-}
-
 // RunCommand 通过 shell 执行单条命令(兼容 Windows)。
 // Windows 优先用 Git 自带的 sh(POSIX 语法,浏览器「Copy as cURL (bash)」可原样粘贴),
 // 找不到时回退 cmd(以原始命令行传入,由 cmd 自己解析引号)。
@@ -91,7 +81,7 @@ func RunCommand(cmdStr string) error {
 	defer cancel()
 
 	cmd := shellCommand(cmdStr)
-	setProcessGroup(cmd)
+	proc.SetProcessGroup(cmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -106,7 +96,7 @@ func RunCommand(cmdStr string) error {
 	case err := <-waitErr:
 		return err
 	case <-ctx.Done():
-		killProcessGroup(cmd)
+		proc.KillProcessGroup(cmd)
 		<-waitErr
 		return fmt.Errorf("命令超时(%s): %s", commandTimeout, cmdStr)
 	}

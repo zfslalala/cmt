@@ -93,8 +93,8 @@ func (c *Client) doRequest(url string, headers map[string]string, body []byte) (
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API 请求失败: %s", string(respBody))
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("API 请求失败(%d): %s", resp.StatusCode, string(respBody))
 	}
 	return respBody, nil
 }

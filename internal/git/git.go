@@ -41,9 +41,14 @@ func HasUncommittedChanges() (bool, error) {
 	return hasUncommittedChangesInDir("")
 }
 
-// AddAll 执行 git add . 暂存所有变更
+// AddAll 从仓库根执行 git add .，暂存整个仓库的变更。
+// （若在子目录执行 git add .，只会暂存该子目录下的变更）
 func AddAll() error {
-	_, err := runGit("add", ".")
+	root, err := RepoRoot()
+	if err != nil {
+		return err
+	}
+	_, err = runGitInDir(root, "add", ".")
 	return err
 }
 
