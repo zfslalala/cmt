@@ -62,6 +62,17 @@ func Execute() {
 	}
 	wtCmd.Flags().BoolVarP(&wtOpenIdea, "idea", "i", false, "创建后在 IntelliJ IDEA 中打开工作树")
 
+	runCmd := &cobra.Command{
+		Use:                "run <脚本> [参数...]",
+		Short:              "执行脚本并输出到控制台",
+		Long:               "执行 Go 脚本（go run），stdout/stderr 实时打印到控制台，退出码透传。脚本可直接给路径，或放 ~/.qg/scripts/（QG_SCRIPTS_DIR 可覆盖）后用名字调用。",
+		SilenceErrors:      true,
+		SilenceUsage:       true,
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
+		RunE:               runRun,
+	}
+
 	pCmd := &cobra.Command{
 		Use:           "p <提交备注>",
 		Short:         "提交所有修改并推送",
@@ -72,7 +83,7 @@ func Execute() {
 		RunE:          runP,
 	}
 
-	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd, wtCmd)
+	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd, wtCmd, runCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		var conflictErr *git.MergeConflictError

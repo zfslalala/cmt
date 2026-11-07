@@ -39,11 +39,18 @@ func loadEnvFiles() {
 	// .env 文件路径列表（按加载顺序）
 	// 注意:godotenv.Load 不会覆盖已存在的环境变量,因此先加载的文件优先生效。
 	// 实际优先级:系统环境变量 > ~/.cmt.env > ~/.env > 当前目录 .env
-	locations := []string{
-		filepath.Join(os.Getenv("HOME"), ".cmt.env"), // 用户 home 目录
-		filepath.Join(os.Getenv("HOME"), ".env"),     // 用户 home 目录
-		".env", // 当前目录
+	home := ""
+	if h, err := os.UserHomeDir(); err == nil {
+		home = h
 	}
+	locations := []string{}
+	if home != "" {
+		locations = append(locations,
+			filepath.Join(home, ".cmt.env"), // 用户 home 目录
+			filepath.Join(home, ".env"),     // 用户 home 目录
+		)
+	}
+	locations = append(locations, ".env") // 当前目录
 
 	for _, loc := range locations {
 		// godotenv.Load 不会覆盖已存在的环境变量

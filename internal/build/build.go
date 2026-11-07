@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,7 +28,7 @@ const commandTimeout = 30 * time.Second
 
 // Load 从 git 仓库根读取 qg.hjson;文件不存在时返回 (nil, nil)。
 // 使用 HJSON 解析(JSON 超集):兼容标准 JSON 写法,
-// 并支持 ''' 多行字符串,可直接粘贴浏览器复制的 curl 命令而无需转义。
+// 并支持三引号多行字符串,可直接粘贴浏览器复制的 curl 命令而无需转义。
 func Load() (*Config, error) {
 	root, err := git.RepoRoot()
 	if err != nil {
@@ -69,6 +70,16 @@ func EnsureFailFlag(cmdStr string) string {
 		return cmdStr
 	}
 	return "curl -f" + strings.TrimPrefix(trimmed, "curl")
+}
+
+// SetProcessGroup 将命令放入独立进程组（供其他包复用）
+func SetProcessGroup(cmd *exec.Cmd) {
+	setProcessGroup(cmd)
+}
+
+// KillProcessGroup 终止命令所在的整个进程组（供其他包复用）
+func KillProcessGroup(cmd *exec.Cmd) {
+	killProcessGroup(cmd)
 }
 
 // RunCommand 通过 shell 执行单条命令(兼容 Windows)。
