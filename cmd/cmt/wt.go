@@ -6,13 +6,17 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/zfslalala/cmt/internal/build"
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/idea"
 	"github.com/zfslalala/cmt/internal/workbuddy"
 )
 
-var wtOpenIdea bool
-var wtOpenWorkBuddy bool
+var (
+	wtOpenIdea      bool
+	wtOpenWorkBuddy bool
+	wtFrom          string
+)
 
 // runWt 创建新分支与对应工作树，可用 -i 在 IntelliJ IDEA 中打开
 func runWt(cmd *cobra.Command, args []string) error {
@@ -22,13 +26,22 @@ func runWt(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("当前目录不是 Git 仓库")
 	}
 
-	path, err := git.CreateWorktree(branch)
+	// 起点：--from 优先，其次 qg.hjson 的 wt.base，都为空则基于当前 HEAD
+	start := wtFrom
+	if start == "" {
+		start = build.WorktreeBase()
+	}
+
+	path, resolvedStart, err := git.CreateWorktree(branch, start)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("工作树已创建: %s\n", path)
 	fmt.Printf("分支: %s\n", branch)
+	if resolvedStart != "" {
+		fmt.Printf("基于: %s\n", resolvedStart)
+	}
 
 	if wtOpenIdea {
 		if err := idea.Open(path); err != nil {

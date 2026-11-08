@@ -16,6 +16,10 @@ import (
 // Config 对应仓库根 qg.hjson 的结构
 type Config struct {
 	Builds map[string]Entry `json:"builds"`
+	Wt     struct {
+		// Base 新分支的默认起点（如 release），qg wt 不带 --from 时使用
+		Base string `json:"base"`
+	} `json:"wt"`
 }
 
 // Entry 是单个分支的构建触发配置
@@ -48,6 +52,20 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("解析 qg.hjson 失败: %w", err)
 	}
 	return &cfg, nil
+}
+
+// WorktreeBase 读取 qg.hjson 中 wt.base 配置（新分支默认起点）。
+// 文件不存在或未配置时返回空串；配置文件损坏时仅告警不阻断。
+func WorktreeBase() string {
+	cfg, err := Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "⚠ 读取 qg.hjson 失败: %v\n", err)
+		return ""
+	}
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Wt.Base)
 }
 
 // EntryFor 返回指定分支的构建配置;未配置时 ok 为 false
