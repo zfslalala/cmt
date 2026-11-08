@@ -85,12 +85,12 @@ func Execute() {
 	}
 
 	rmCmd := &cobra.Command{
-		Use:           "rm [branch]",
-		Short:         "删除分支及对应工作树",
-		Long:          "删除分支，若分支检出于工作树则一并删除工作树。不带分支名时删除当前分支（主仓库会先切到默认分支）。-o 同时删除远程同名分支，--force 强制跳过脏工作树与未合并检查。",
+		Use:           "rm",
+		Short:         "删除当前分支及对应工作树",
+		Long:          "删除当前所在分支，若分支检出于工作树则一并删除工作树，主仓库自动切回默认分支。-o 同时删除远程同名分支，--force 强制跳过脏工作树与未合并检查。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
-		Args:          cobra.MaximumNArgs(1),
+		Args:          cobra.NoArgs,
 		RunE:          runRm,
 	}
 	rmCmd.Flags().BoolVarP(&rmRemote, "origin", "o", false, "同时删除远程 origin 上的同名分支")

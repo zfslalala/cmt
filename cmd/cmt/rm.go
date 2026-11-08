@@ -15,21 +15,15 @@ var (
 	rmForce  bool
 )
 
-// runRm 删除分支；不带参数时删除当前分支，检出于工作树则一并删除
+// runRm 删除当前所在分支，检出于工作树则一并删除
 func runRm(cmd *cobra.Command, args []string) error {
 	if !git.IsGitRepo() {
 		return fmt.Errorf("当前目录不是 Git 仓库")
 	}
 
-	branch := ""
-	if len(args) > 0 {
-		branch = args[0]
-	} else {
-		b, err := git.CurrentBranch()
-		if err != nil {
-			return err
-		}
-		branch = b
+	branch, err := git.CurrentBranch()
+	if err != nil {
+		return err
 	}
 
 	// 远程删除不可逆，显式确认

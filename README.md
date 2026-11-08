@@ -20,7 +20,7 @@ qg
 ├── p <备注>         提交所有修改并推送
 ├── wt <branch>     创建分支和工作树（-i IDEA 打开 / -w WorkBuddy 打开）
 ├── run <脚本>       执行 Go 脚本（--timeout 秒数；脚本目录 ~/.qg/scripts/）
-└── rm [branch]     删除分支及对应工作树（-o 连远程分支一起删 / --force 强制）
+└── rm              删除当前分支及对应工作树（-o 连远程分支一起删 / --force 强制）
 ```
 
 直接运行 `qg` 会显示命令帮助。
