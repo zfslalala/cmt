@@ -16,7 +16,11 @@
 qg
 ├── cmt             AI 生成 commit message（-v / -e / -p）
 ├── gmt <branch>    快速分支同步：合并当前分支到目标分支并推送
-└── from            查看当前分支来源信息（来源 / 切出时间）
+├── from            查看当前分支来源信息（来源 / 切出时间）
+├── p <备注>         提交所有修改并推送
+├── wt <branch>     创建分支和工作树（-i IDEA 打开 / -w WorkBuddy 打开）
+├── run <脚本>       执行 Go 脚本（--timeout 秒数；脚本目录 ~/.qg/scripts/）
+└── rm [branch]     删除分支及对应工作树（-o 连远程分支一起删 / --force 强制）
 ```
 
 直接运行 `qg` 会显示命令帮助。

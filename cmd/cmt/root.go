@@ -84,7 +84,19 @@ func Execute() {
 		RunE:          runP,
 	}
 
-	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd, wtCmd, runCmd)
+	rmCmd := &cobra.Command{
+		Use:           "rm [branch]",
+		Short:         "删除分支及对应工作树",
+		Long:          "删除分支，若分支检出于工作树则一并删除工作树。不带分支名时删除当前分支（主仓库会先切到默认分支）。-o 同时删除远程同名分支，--force 强制跳过脏工作树与未合并检查。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.MaximumNArgs(1),
+		RunE:          runRm,
+	}
+	rmCmd.Flags().BoolVarP(&rmRemote, "origin", "o", false, "同时删除远程 origin 上的同名分支")
+	rmCmd.Flags().BoolVar(&rmForce, "force", false, "强制删除：脏工作树、未合并分支也删")
+
+	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd, wtCmd, runCmd, rmCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		var conflictErr *git.MergeConflictError
