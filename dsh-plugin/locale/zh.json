@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "qg 工作区桥接",
+    "description": "让 qg 命令行创建并打开 DeepSeek Harness 工作区。"
+  }
+}

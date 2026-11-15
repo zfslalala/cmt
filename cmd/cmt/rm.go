@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zfslalala/cmt/internal/dsh"
 	"github.com/zfslalala/cmt/internal/git"
 )
 
@@ -54,6 +55,17 @@ func runRm(cmd *cobra.Command, args []string) error {
 	}
 	if res.RemoteMessage != "" {
 		fmt.Fprintln(os.Stderr, res.RemoteMessage)
+	}
+
+	// 工作树删除后，同步移除 DSH 中指向它的工作区。DSH 未运行或未安装
+	// 插件时静默跳过，不影响已经完成的本地删除。
+	if res.WorktreePath != "" {
+		removed, dshErr := dsh.RemoveWorkspace(res.WorktreePath)
+		if dshErr != nil {
+			fmt.Fprintf(os.Stderr, "⚠ 删除 DSH 工作区失败（本地分支与工作树已删除）: %v\n", dshErr)
+		} else if removed.Removed {
+			fmt.Printf("已删除 DSH 工作区: %s\n", removed.WorkspaceID)
+		}
 	}
 	return nil
 }

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "qg workspace bridge",
+    "description": "Creates and opens a DeepSeek Harness workspace for the qg CLI."
+  }
+}

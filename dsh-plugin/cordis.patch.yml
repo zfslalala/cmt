@@ -1,0 +1,4 @@
+# qg-dsh-open: host half starts the local bridge, client half opens the workspace.
+- insert:
+    - id: qg-dsh-open
+      name: qg-dsh-open

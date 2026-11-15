@@ -67,11 +67,14 @@ func runWt(cmd *cobra.Command, args []string) error {
 	}
 
 	if wtOpenDSH {
-		if err := dsh.OpenWorkspace(path); err != nil {
+		res, err := dsh.OpenWorkspace(path)
+		if err != nil {
 			// 工作树已创建成功，打开失败只警告不报错
 			fmt.Fprintln(os.Stderr, err)
+		} else if res.Created {
+			fmt.Printf("已在 DeepSeek Harness 中创建工作区并打开: %s\n", res.WorkspaceID)
 		} else {
-			fmt.Println("已启动 DeepSeek Harness（dsh web --port 0），工作树已作为默认目录，浏览器将自动打开")
+			fmt.Printf("已在 DeepSeek Harness 中打开工作区: %s\n", res.WorkspaceID)
 		}
 	}
 	return nil

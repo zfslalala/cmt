@@ -7,7 +7,7 @@
 - ⚡ **快速分支同步**：一条命令合并当前分支到目标分支并推送（`qg gmt`）
 - 🤖 **AI 生成提交信息**：根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message（`qg cmt`）
 - 🌳 **工作树管理**：创建新分支并在当前目录同级创建独立工作树，可一键用 IDEA / WorkBuddy / DeepSeek Harness 打开（`qg wt`）
-- 🧹 **分支清理**：删除当前分支及对应工作树，可选连远程分支一起删除（`qg rm`）
+- 🧹 **分支清理**：删除当前分支、对应工作树及 DSH 工作区，可选连远程分支一起删除（`qg rm`）
 - 🏃 **脚本运行**：用 Go 编写一次性脚本，像本地命令一样执行（`qg run`）
 - ✏️ 支持精简/详细模式、编辑确认后再提交、一键提交并推送
 - 🔧 支持所有 OpenAI 协议兼容的大模型服务，以及 Anthropic Messages API
@@ -17,7 +17,7 @@
 
 - Git（必需）
 - Go 1.21+（仅 `qg run` 和源码编译需要）
-- 可选：IntelliJ IDEA、WorkBuddy、DeepSeek Harness（分别用于 `qg wt -i / -w / -d`）
+- 可选：IntelliJ IDEA、WorkBuddy、DeepSeek Harness Desktop（分别用于 `qg wt -i / -w / -d`；`-d` 还需要仓库中的 `dsh-plugin`）
 
 ## 命令结构
 
@@ -27,9 +27,9 @@ qg
 ├── gmt <branch>    快速分支同步：合并当前分支到目标分支并推送（-b 触发构建）
 ├── from            查看当前分支来源信息（来源 / 切出时间）
 ├── p <备注>         提交所有修改并推送
-├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy / -d DSH）
+├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy / -d DSH Desktop）
 ├── run <脚本>       执行 Go 脚本（--timeout 秒数；脚本目录 ~/.qg/scripts/）
-└── rm              删除当前分支及对应工作树（-o 连远程分支一起删 / --force 强制）
+└── rm              删除当前分支、工作树及 DSH 工作区（-o 连远程分支一起删 / --force 强制）
 ```
 
 直接运行 `qg` 或 `qg --help` 会显示命令帮助；`qg <命令> --help` 查看单个命令的旗标。
@@ -109,7 +109,7 @@ qg wt feature/login -i
 # 创建后在 WorkBuddy 中打开（新任务草稿）
 qg wt feature/login -w
 
-# 创建后在 DeepSeek Harness 中打开（新 Web 实例）
+# 创建后在 DSH Desktop 中创建工作区并打开
 qg wt feature/login -d
 ```
 
@@ -147,14 +147,34 @@ qg wt feature/login -d
 |---|---|---|
 | `-i, --idea` | 用 IntelliJ IDEA 打开工作树 | 本机安装 IDEA（PATH 中的 `idea`、Toolbox 脚本或 `/Applications/IntelliJ IDEA*.app`） |
 | `-w, --workbuddy` | 通过 `workbuddy://task?action=start&cwd=...` 新建 WorkBuddy 任务草稿 | 安装 WorkBuddy 并注册 URL 协议 |
-| `-d, --dsh` | 在工作树中执行 `dsh web --port 0`，以该工作树为默认目录并自动打开浏览器 | PATH 中有 `dsh` 命令（可在 DeepSeek Harness 菜单「管理 dsh 命令…」中安装） |
+| `-d, --dsh` | 在整合版 DSH Desktop 中创建/复用该工作树的工作区并打开 | 安装仓库 `dsh-plugin/` 中的 `qg-dsh-open` 插件；DSH Desktop 已启动 |
 
 说明：
 
-- `-d` 启动的是一个**独立的 DSH Web 实例**，不会在已经运行的 DSH Desktop 窗口中自动新建或选中工作区；端口交给系统分配，可以同时为多个工作树打开多个实例。
-- 全新 DSH Web 首次打开时可能还没有选中任何工作区，需要在页面中把该工作树添加为工作区（目录选择器会从该工作树开始）。
-- 打开失败（例如未安装 IDEA / WorkBuddy / dsh）只打印警告，**工作树仍会保留**，不会回滚已创建的分支。
+- `-d` 会启动或聚焦 **DSH Desktop**（不是浏览器 Web UI），通过 `qg-dsh-open` 插件的本地桥接调用 `workspaceRegistry` 创建工作区，再由 Client 半打开它。
+- 工作区已存在时直接复用并打开，保留原名称；新工作区以目录名作为标题。
+- DSH 未运行时 qg 会先尝试启动 DeepSeek Harness，并等待桥接就绪（最多约 15 秒）。
+- 插件未安装、未加载或令牌失效时只打印警告，**工作树仍会保留**，不会回滚已创建的分支。
 - 多个旗标可以同时使用，例如 `qg wt feature/login -i -d`。
+
+#### DSH 插件（`qg-dsh-open`）
+
+`-d` 依赖仓库中的 [dsh-plugin](dsh-plugin/)：
+
+1. 在 DSH Desktop 中打开 **设置 → 插件 → 添加插件**，选择本地目录 `<仓库>/dsh-plugin`。
+2. 安装后重启 DSH Desktop（若插件 HMR 未自动加载）。
+3. 验证桥接已启动：
+
+```bash
+ls -l ~/.qg/dsh-bridge.json
+```
+
+插件由两部分组成：
+
+- Host 半在 `127.0.0.1` 的随机端口启动桥接服务，把 `{port, token}` 写入 `~/.qg/dsh-bridge.json`（权限 `0600`）。
+- Client 半监听工作区列表，看到标记后调用 `uiWorkspace.openWorkspace()` 打开工作区，并恢复原标题。
+
+可用 `QG_DSH_BRIDGE` 覆盖桥接文件路径（测试或自定义安装时使用）。
 
 ### 快速分支同步（`qg gmt`）
 
@@ -274,6 +294,8 @@ qg rm --force
 - 固定删除**当前所在分支**，不接受分支名参数。
 - 若分支检出于主仓库：先切换到本地默认分支（优先 `main`，其次 `master`）再删除；主仓库有未提交变更时拒绝切换。
 - 若分支检出于链接工作树：先 `git worktree remove` 再删分支；工作树有未提交变更时默认拒绝（`--force` 可强制）。
+- 删除链接工作树后，会同步删除 DSH 中路径对应的 workspace（`qg-dsh-open` 桥接的 `/remove`）。DSH 未运行、插件未安装或没有对应 workspace 时静默跳过；删除失败只警告，本地删除结果不受影响。
+- 分支检出于主仓库时只删除分支，不会删除主仓库路径对应的 DSH workspace。
 - 本地删除默认使用 `git branch -d`，未合并的分支会被拒绝；`--force` 改用 `-D`。
 - `-o` 会先打印待删除的本地/远程分支并等待 `y` 确认；远程删除失败只警告，本地删除结果不受影响。
 - 删除工作树后，如果当前终端仍位于被删目录内，请先 `cd` 出来。
@@ -395,6 +417,7 @@ export CMT_MODEL="claude-sonnet-4-5"
 | `CMT_API_URL` | `qg cmt` 的 API Base URL |
 | `CMT_MODEL` | `qg cmt` 使用的模型 |
 | `QG_SCRIPTS_DIR` | `qg run` 的脚本目录，默认 `~/.qg/scripts` |
+| `QG_DSH_BRIDGE` | `qg wt -d` 读取的 DSH 桥接文件，默认 `~/.qg/dsh-bridge.json` |
 
 ## 开发
 
@@ -436,11 +459,12 @@ internal/build/          qg.hjson 解析与构建命令执行
 internal/runner/         qg run 的脚本解析、编译与执行
 internal/idea/           IntelliJ IDEA 检测与启动
 internal/workbuddy/      WorkBuddy 深链接
-internal/dsh/            在指定目录启动 dsh web
+internal/dsh/            通过 DSH Desktop 桥接创建并打开工作区
 internal/llm/            LLM API 客户端（OpenAI 兼容 / Anthropic）
 internal/prompt/         commit message Prompt 构造
 internal/proc/           跨平台进程组管理（超时终止子进程树）
 pkg/config/              环境变量与 .env 配置加载
+dsh-plugin/              qg-dsh-open：DSH Desktop 工作区桥接插件（Host + Client）
 ```
 
 ## 常见问题
@@ -457,9 +481,17 @@ pkg/config/              环境变量与 .env 配置加载
 
 确认 WorkBuddy 已安装并注册了 `workbuddy://` 协议。工作树仍然创建成功。
 
-**`qg wt -d` 提示未检测到 dsh 命令**
+**`qg wt -d` 提示未检测到 DSH 工作区桥接插件**
 
-在 DeepSeek Harness 菜单中选择「管理 dsh 命令…」安装，或把 `dsh` 放到 PATH 中。`-d` 启动的是独立的 DSH Web 实例，不会接管已运行的 Desktop 窗口。
+说明 `qg-dsh-open` 插件没有安装或没有加载。按上文“DSH 插件”安装 `dsh-plugin/`，然后重启 DSH Desktop；确认 `~/.qg/dsh-bridge.json` 已生成。
+
+**`qg wt -d` 提示桥接令牌已失效**
+
+DSH 宿主重启后会生成新令牌，而 qg 读到了旧文件。重启 DeepSeek Harness 后重试；qg 也会尝试启动并等待新的桥接文件。
+
+**`qg wt -d` 提示桥接返回错误**
+
+通常是工作树路径不存在或不是目录。检查 qg 输出的路径；插件只接受已存在的绝对目录。
 
 **`qg gmt` 合并冲突**
 
