@@ -7,6 +7,7 @@
 - ⚡ **快速分支同步**：一条命令合并当前分支到目标分支并推送（`qg gmt`）
 - 🤖 **AI 生成提交信息**：根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message（`qg cmt`）
 - 🌳 **工作树管理**：创建新分支并在当前目录同级创建独立工作树，可一键用 IDEA / WorkBuddy / DeepSeek Harness 打开（`qg wt`）
+- 🧠 **知识库挂载**：知识库放在仓库外，用符号链接挂进工作树，多个工作树共享同一份项目知识（`qg kb`）
 - 🧹 **分支清理**：删除当前分支、对应工作树及 DSH 工作区，可选连远程分支一起删除（`qg rm`）
 - 🏃 **脚本运行**：用 Go 编写一次性脚本，像本地命令一样执行（`qg run`）
 - ✏️ 支持精简/详细模式、编辑确认后再提交、一键提交并推送
@@ -29,6 +30,9 @@ qg
 ├── p <备注>         提交所有修改并推送
 ├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy / -d DSH Desktop）
 ├── run <脚本>       执行 Go 脚本（--timeout 秒数；脚本目录 ~/.qg/scripts/）
+├── kb              知识库挂载与状态
+│   ├── attach [路径] 挂载知识库（缺省当前目录）
+│   └── status      查看各工作树的挂载状态
 └── rm              删除当前分支、工作树及 DSH 工作区（-o 连远程分支一起删 / --force 强制）
 ```
 
@@ -155,6 +159,7 @@ qg wt feature/login -d
 - 工作区已存在时直接复用并打开，保留原名称；新工作区以目录名作为标题。
 - DSH 未运行时 qg 会先尝试启动 DeepSeek Harness，并等待桥接就绪（最多约 15 秒）。
 - 插件未安装、未加载或令牌失效时只打印警告，**工作树仍会保留**，不会回滚已创建的分支。
+- 工作树创建后自动挂载知识库（等价 `qg kb attach`）并生成 `AGENTS.local.md`；挂载失败只警告，工作树保留。
 - 多个旗标可以同时使用，例如 `qg wt feature/login -i -d`。
 
 #### DSH 插件（`qg-dsh-open`）
@@ -175,6 +180,21 @@ ls -l ~/.qg/dsh-bridge.json
 - Client 半监听工作区列表，看到标记后调用 `uiWorkspace.openWorkspace()` 打开工作区，并恢复原标题。
 
 可用 `QG_DSH_BRIDGE` 覆盖桥接文件路径（测试或自定义安装时使用）。
+
+### 知识库（`qg kb`）
+
+知识库放在仓库之外（默认仓库同级 `_ai-kb`，其次 `~/.ai-kb`），用符号链接挂进工作树：主工作树的 `.dsh` 直接指向基座；特性分支生成合成视图，技能按名字由分支覆盖基座，知识写入分支目录，基座作为只读参考。挂载物写进 git 的 `info/exclude`，对 git 不可见。
+
+```bash
+qg kb attach                 # 挂载当前工作树
+qg kb attach ../feature-login # 挂载指定工作树
+qg kb status                 # 列出各工作树的挂载状态，不写文件
+```
+
+- 挂载时创建 `AGENTS.md` 与 `.dsh` 链接；已存在的真实文件不覆盖，只告警。
+- **缺失自动初始化**：全局层（`AGENTS.md`、`skills/`）或项目骨架（`AGENTS.md`、`skills/`、`knowledge/{journal,glossary}.md`）缺失时自动创建；整个知识库被删后，下次 `qg kb attach` 或 `qg wt` 会重建。
+- 全局层链接到 DSH 配置目录：`$DSH_HOME/AGENTS.md`、`$DSH_HOME/skills`（默认 `~/.dsh`）。已存在的真实文件或有效链接不动（指向别处时告警），悬空链接会被修复。
+- `qg rm` 删除分支时，若分支知识目录从未写入过，会一并清理。
 
 ### 快速分支同步（`qg gmt`）
 
@@ -418,6 +438,8 @@ export CMT_MODEL="claude-sonnet-4-5"
 | `CMT_MODEL` | `qg cmt` 使用的模型 |
 | `QG_SCRIPTS_DIR` | `qg run` 的脚本目录，默认 `~/.qg/scripts` |
 | `QG_DSH_BRIDGE` | `qg wt -d` 读取的 DSH 桥接文件，默认 `~/.qg/dsh-bridge.json` |
+| `AI_KB_ROOT` | 知识库根目录，默认仓库同级 `_ai-kb`，其次 `~/.ai-kb` |
+| `DSH_HOME` | DSH 配置目录，默认 `~/.dsh`；`qg kb` 把全局 `AGENTS.md` / `skills` 链接到这里 |
 
 ## 开发
 
@@ -453,8 +475,10 @@ cmd/cmt/                 命令实现（package cmt）
   p.go                   暂存、提交并推送
   wt.go                  创建工作树
   run.go                 运行 Go 脚本
+  kb.go                 知识库挂载与状态
   rm.go                  删除分支与工作树
 internal/git/            Git 命令封装（状态、变更、worktree、分支同步、删除、reflog）
+internal/kb/             知识库挂载（符号链接、合成视图、骨架创建）
 internal/build/          qg.hjson 解析与构建命令执行
 internal/runner/         qg run 的脚本解析、编译与执行
 internal/idea/           IntelliJ IDEA 检测与启动

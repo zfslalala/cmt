@@ -97,6 +97,13 @@ func attachKB(path, branch, start string) {
 		return
 	}
 
+	if layout.GlobalCreated {
+		fmt.Printf("知识库全局层已创建: %s\n", layout.Root)
+	}
+	if layout.Bootstrapped {
+		fmt.Printf("知识库尚未初始化，已自动创建骨架: %s\n", layout.Base)
+		fmt.Println("（请补充 AGENTS.md 与 .dsh/skills 下的技能，否则 AI 只知道这是个空项目）")
+	}
 	fmt.Printf("已挂载知识库: %s（项目 %s）\n", layout.Root, layout.Project)
 	if layout.Branch != "" {
 		fmt.Printf("分支知识目录: %s\n", layout.Branch)

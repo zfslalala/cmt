@@ -20,6 +20,14 @@ func runKbAttach(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if layout.GlobalCreated {
+		fmt.Printf("知识库全局层已创建: %s\n", layout.Root)
+	}
+	if layout.Bootstrapped {
+		fmt.Printf("知识库尚未初始化，已自动创建骨架: %s\n", layout.Base)
+		fmt.Println("（请补充 AGENTS.md 与 .dsh/skills 下的技能，否则 AI 只知道这是个空项目）")
+	}
+
 	fmt.Printf("知识库: %s\n", layout.Root)
 	fmt.Printf("项目:   %s\n", layout.Project)
 	fmt.Printf("基座:   %s\n", layout.Base)

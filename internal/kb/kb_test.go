@@ -342,3 +342,146 @@ func TestCleanupBranchKnowledge(t *testing.T) {
 		t.Fatalf("日志应被保留: %v", err)
 	}
 }
+
+func TestAttachCreatesMissingProject(t *testing.T) {
+	parent, repo := setup(t)
+	// 不预先建知识库，模拟首次使用或知识库被删
+	root := filepath.Join(parent, defaultRootName)
+	t.Setenv("AI_KB_ROOT", root)
+
+	layout, err := Attach(repo)
+	if err != nil {
+		t.Fatalf("缺少基座时应自动创建，实际失败: %v", err)
+	}
+	if !layout.Bootstrapped {
+		t.Fatalf("应标记为已自动创建")
+	}
+
+	base := filepath.Join(root, "projects", "demo", baseDirName)
+	for _, path := range []string{
+		filepath.Join(base, "AGENTS.md"),
+		filepath.Join(base, "skills"),
+		filepath.Join(base, "knowledge", "journal.md"),
+		filepath.Join(base, "knowledge", "glossary.md"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("骨架缺少 %s: %v", path, err)
+		}
+	}
+
+	data, err := os.ReadFile(filepath.Join(base, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("读取 AGENTS.md 失败: %v", err)
+	}
+	if !strings.Contains(string(data), "demo") {
+		t.Fatalf("骨架 AGENTS.md 应含项目名:\\n%s", data)
+	}
+	assertLinkTarget(t, filepath.Join(repo, "AGENTS.md"), filepath.Join(base, "AGENTS.md"))
+
+	// 已存在的内容不能被第二次挂载覆盖
+	custom := filepath.Join(base, "AGENTS.md")
+	if err := os.WriteFile(custom, []byte("# 手写内容\n"), 0o644); err != nil {
+		t.Fatalf("改写失败: %v", err)
+	}
+	layout, err = Attach(repo)
+	if err != nil {
+		t.Fatalf("重复挂载失败: %v", err)
+	}
+	if layout.Bootstrapped {
+		t.Fatalf("第二次不应再创建骨架")
+	}
+	data, _ = os.ReadFile(custom)
+	if string(data) != "# 手写内容\n" {
+		t.Fatalf("已存在的 AGENTS.md 被覆盖: %s", data)
+	}
+}
+
+func TestAttachRebuildsWholeKnowledgeBase(t *testing.T) {
+	parent, repo := setup(t)
+	root := filepath.Join(parent, defaultRootName)
+	home := filepath.Join(parent, "dsh-home")
+	t.Setenv("AI_KB_ROOT", root)
+	t.Setenv("DSH_HOME", home)
+
+	layout, err := Attach(repo)
+	if err != nil {
+		t.Fatalf("知识库整体缺失时应能重建: %v", err)
+	}
+	if !layout.GlobalCreated {
+		t.Fatalf("应标记为创建了全局层")
+	}
+	if !layout.Bootstrapped {
+		t.Fatalf("应标记为创建了项目骨架")
+	}
+
+	for _, path := range []string{
+		filepath.Join(root, "AGENTS.md"),
+		filepath.Join(root, "skills"),
+		filepath.Join(root, "projects", "demo", baseDirName, "AGENTS.md"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("缺少 %s: %v", path, err)
+		}
+	}
+
+	assertLinkTarget(t, filepath.Join(home, "AGENTS.md"), filepath.Join(root, "AGENTS.md"))
+	assertLinkTarget(t, filepath.Join(home, "skills"), filepath.Join(root, "skills"))
+}
+
+func TestAttachRepairsDanglingGlobalLinks(t *testing.T) {
+	parent, repo := setup(t)
+	root := filepath.Join(parent, defaultRootName)
+	home := filepath.Join(parent, "dsh-home")
+	t.Setenv("AI_KB_ROOT", root)
+	t.Setenv("DSH_HOME", home)
+
+	if _, err := Attach(repo); err != nil {
+		t.Fatalf("首次挂载失败: %v", err)
+	}
+
+	// 模拟整个知识库被删：全局链接变悬空
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatalf("删除知识库失败: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("此时全局链接应已悬空")
+	}
+
+	if _, err := Attach(repo); err != nil {
+		t.Fatalf("知识库被删后应能重建: %v", err)
+	}
+
+	assertLinkTarget(t, filepath.Join(home, "AGENTS.md"), filepath.Join(root, "AGENTS.md"))
+	if _, err := os.Stat(filepath.Join(home, "AGENTS.md")); err != nil {
+		t.Fatalf("重建后全局链接应可解析: %v", err)
+	}
+}
+
+func TestAttachDoesNotStealForeignGlobalFile(t *testing.T) {
+	parent, repo := setup(t)
+	root := filepath.Join(parent, defaultRootName)
+	home := filepath.Join(parent, "dsh-home")
+	t.Setenv("AI_KB_ROOT", root)
+	t.Setenv("DSH_HOME", home)
+
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("创建 dsh home 失败: %v", err)
+	}
+	mine := filepath.Join(home, "AGENTS.md")
+	if err := os.WriteFile(mine, []byte("# 我自己写的\n"), 0o644); err != nil {
+		t.Fatalf("写文件失败: %v", err)
+	}
+
+	layout, err := Attach(repo)
+	if err != nil {
+		t.Fatalf("挂载失败: %v", err)
+	}
+
+	data, _ := os.ReadFile(mine)
+	if string(data) != "# 我自己写的\n" {
+		t.Fatalf("不应覆盖用户自己的 ~/.dsh/AGENTS.md")
+	}
+	if len(layout.Warnings) == 0 {
+		t.Fatalf("跳过的全局文件应产生警告")
+	}
+}

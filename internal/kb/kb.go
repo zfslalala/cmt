@@ -65,6 +65,10 @@ type Layout struct {
 	MainWorktree string
 	// IsMain 表示被挂载的是主工作树。
 	IsMain bool
+	// Bootstrapped 表示这次挂载顺带创建了知识库骨架。
+	Bootstrapped bool
+	// GlobalCreated 表示这次挂载顺带创建了知识库全局层。
+	GlobalCreated bool
 	// Warnings 收集不致命、但需要人知道的情况，例如已存在的真实文件未被覆盖。
 	Warnings []string
 }
@@ -181,8 +185,18 @@ func Attach(dir string) (Layout, error) {
 		return layout, err
 	}
 
+	globalCreated, err := ensureGlobal(&layout)
+	if err != nil {
+		return layout, err
+	}
+	layout.GlobalCreated = globalCreated
+
 	if !isDir(layout.Base) {
-		return layout, fmt.Errorf("知识库缺少基座目录: %s", layout.Base)
+		created, err := ensureProject(&layout)
+		if err != nil {
+			return layout, err
+		}
+		layout.Bootstrapped = created
 	}
 
 	if !layout.IsMain {
@@ -265,6 +279,169 @@ func Status(dir string) ([]WorktreeStatus, string, error) {
 	}
 
 	return items, layout.Project, nil
+}
+
+// DSHHome 返回 DSH 的配置根目录：DSH_HOME 优先，否则 ~/.dsh。
+func DSHHome() string {
+	if value := strings.TrimSpace(os.Getenv("DSH_HOME")); value != "" {
+		return value
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".dsh")
+	}
+	return ""
+}
+
+// ensureGlobal 补全知识库全局层，并把它挂到 DSH 的配置目录。
+// 整个知识库被删掉后，任意一次 qg kb 操作都能把它重建回来。
+func ensureGlobal(layout *Layout) (bool, error) {
+	if layout.Root == "" {
+		return false, nil
+	}
+
+	created := false
+
+	skills := filepath.Join(layout.Root, "skills")
+	if !isDir(skills) {
+		if err := os.MkdirAll(skills, 0o755); err != nil {
+			return false, fmt.Errorf("创建知识库技能目录失败: %w", err)
+		}
+		created = true
+	}
+
+	agents := filepath.Join(layout.Root, "AGENTS.md")
+	if !pathExists(agents) {
+		if err := os.WriteFile(agents, []byte(globalAgentsTemplate()), 0o644); err != nil {
+			return false, fmt.Errorf("写入全局 AGENTS.md 失败: %w", err)
+		}
+		created = true
+	}
+
+	home := DSHHome()
+	if home == "" {
+		return created, nil
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		return created, fmt.Errorf("创建 DSH 配置目录失败: %w", err)
+	}
+
+	if err := linkIfAbsentOrDangling(agents, filepath.Join(home, "AGENTS.md"), layout); err != nil {
+		return created, err
+	}
+	if err := linkIfAbsentOrDangling(skills, filepath.Join(home, "skills"), layout); err != nil {
+		return created, err
+	}
+
+	return created, nil
+}
+
+// linkIfAbsentOrDangling 只在目标缺失、或是指向已消失目标的悬空链接时建立链接。
+// 目标已是有效链接或真实文件时一律不动，避免踩坏用户自己的配置。
+func linkIfAbsentOrDangling(src, dst string, layout *Layout) error {
+	info, err := os.Lstat(dst)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return fmt.Errorf("检查 %s 失败: %w", dst, err)
+	default:
+		if info.Mode()&os.ModeSymlink == 0 {
+			layout.Warnings = append(layout.Warnings, fmt.Sprintf("%s 已存在且不是符号链接，未覆盖", dst))
+			return nil
+		}
+		current, err := os.Readlink(dst)
+		if err != nil {
+			return fmt.Errorf("读取链接失败: %w", err)
+		}
+		if _, err := os.Stat(dst); err == nil {
+			if current != src {
+				layout.Warnings = append(layout.Warnings, fmt.Sprintf("%s 指向别处（%s），未覆盖", dst, current))
+			}
+			return nil
+		}
+		// 悬空链接：目标已消失，重建
+		if err := os.Remove(dst); err != nil {
+			return fmt.Errorf("移除悬空链接失败: %w", err)
+		}
+	}
+
+	if err := os.Symlink(src, dst); err != nil {
+		return fmt.Errorf("创建全局链接失败: %w", err)
+	}
+
+	return nil
+}
+
+// globalAgentsTemplate 是全局 AGENTS.md 的初始内容。
+func globalAgentsTemplate() string {
+	return `# 全局约定
+
+> 这个文件由 qg 自动创建，还没有内容。
+> 补充之前，遇到跨项目的习惯问题（回复语言、提交方式、验证命令）直接问我。
+
+<!-- 建议从这里开始：
+- 回复用中文，代码注释与提交信息用英文
+- 不自动 commit / push，除非当轮明确要求
+- 交付前跑通项目自己的验证命令
+-->
+`
+}
+
+// ensureProject 在知识库里还没有这个项目时创建骨架，已有则原样返回。
+// 只创建缺失的部分，绝不覆盖已存在的文件。
+func ensureProject(layout *Layout) (bool, error) {
+	dirs := []string{
+		layout.Base,
+		filepath.Join(layout.Base, "skills"),
+		filepath.Join(layout.Base, "knowledge"),
+		filepath.Join(layout.Base, "knowledge", "decisions"),
+		layout.ProjectPath(),
+		filepath.Join(layout.ProjectPath(), branchesDirName),
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return false, fmt.Errorf("创建知识库骨架失败: %w", err)
+		}
+	}
+
+	files := map[string]string{
+		filepath.Join(layout.Base, "AGENTS.md"):                          projectAgentsTemplate(layout.Project),
+		filepath.Join(layout.Base, "knowledge", "journal.md"):            "# 需求日志\n\n按时间倒序，最新在上。\n",
+		filepath.Join(layout.Base, "knowledge", "glossary.md"):           "# 术语表\n\n| 术语 | 含义 | 别称 / 易混 |\n|---|---|---|\n",
+		filepath.Join(layout.Base, "knowledge", "decisions", ".gitkeep"): "",
+	}
+	for path, content := range files {
+		if pathExists(path) {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			return false, fmt.Errorf("写入知识库骨架文件失败: %w", err)
+		}
+	}
+
+	return true, nil
+}
+
+// projectAgentsTemplate 是新项目基座里 AGENTS.md 的初始内容。
+// 刻意保持很短：没有真实内容时，让模型去问人而不是猜。
+func projectAgentsTemplate(project string) string {
+	return fmt.Sprintf(`# %s
+
+> 这个知识库由 qg 自动创建，还没有实际内容。
+> 补充之前，遇到项目相关的问题（构建方式、架构、约定）直接问我，不要凭猜测回答。
+> 随着需求推进，把确认过的架构、约定、坑逐步补进 .dsh/skills/ 和 .dsh/knowledge/。
+
+## 构建 / 测试
+
+<!-- 例如：make build / make test -->
+
+## 必须遵守
+
+<!-- 项目独有的硬约束，违反会出问题的那种 -->
+
+## 知识索引
+
+<!-- 往 .dsh/skills/ 里补技能后，在这里列出来，让模型知道什么时候该调哪个 -->
+`, project)
 }
 
 // ensureBranch 创建分支知识目录，缺失时写入 journal 模板。
