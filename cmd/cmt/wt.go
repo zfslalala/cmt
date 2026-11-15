@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zfslalala/cmt/internal/build"
+	"github.com/zfslalala/cmt/internal/dsh"
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/idea"
 	"github.com/zfslalala/cmt/internal/workbuddy"
@@ -15,10 +16,11 @@ import (
 var (
 	wtOpenIdea      bool
 	wtOpenWorkBuddy bool
+	wtOpenDSH       bool
 	wtFrom          string
 )
 
-// runWt 创建新分支与对应工作树，可用 -i 在 IntelliJ IDEA 中打开
+// runWt 创建新分支与对应工作树，可用 -i / -w / -d 在对应工具中打开
 func runWt(cmd *cobra.Command, args []string) error {
 	branch := args[0]
 
@@ -61,6 +63,15 @@ func runWt(cmd *cobra.Command, args []string) error {
 			fmt.Fprintln(os.Stderr, err)
 		} else {
 			fmt.Println("已用 WorkBuddy 打开工作树（新任务草稿）")
+		}
+	}
+
+	if wtOpenDSH {
+		if err := dsh.OpenWorkspace(path); err != nil {
+			// 工作树已创建成功，打开失败只警告不报错
+			fmt.Fprintln(os.Stderr, err)
+		} else {
+			fmt.Println("已启动 DeepSeek Harness（dsh web --port 0），工作树已作为默认目录，浏览器将自动打开")
 		}
 	}
 	return nil

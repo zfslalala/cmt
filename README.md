@@ -4,26 +4,35 @@
 
 ## 功能特性
 
-- ⚡ 快速分支同步：一条命令合并当前分支到目标分支并推送（`qg gmt`）
-- 🤖 AI 生成提交信息：根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message（`qg cmt`）
+- ⚡ **快速分支同步**：一条命令合并当前分支到目标分支并推送（`qg gmt`）
+- 🤖 **AI 生成提交信息**：根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message（`qg cmt`）
+- 🌳 **工作树管理**：创建新分支并在当前目录同级创建独立工作树，可一键用 IDEA / WorkBuddy / DeepSeek Harness 打开（`qg wt`）
+- 🧹 **分支清理**：删除当前分支及对应工作树，可选连远程分支一起删除（`qg rm`）
+- 🏃 **脚本运行**：用 Go 编写一次性脚本，像本地命令一样执行（`qg run`）
 - ✏️ 支持精简/详细模式、编辑确认后再提交、一键提交并推送
-- 🔧 支持所有 OpenAI 协议兼容的大模型服务
-- 🪶 单二进制文件，零依赖，纯 Git 操作无需任何配置
+- 🔧 支持所有 OpenAI 协议兼容的大模型服务，以及 Anthropic Messages API
+- 🪶 单二进制文件，零依赖；纯 Git 操作无需任何配置
+
+## 环境要求
+
+- Git（必需）
+- Go 1.21+（仅 `qg run` 和源码编译需要）
+- 可选：IntelliJ IDEA、WorkBuddy、DeepSeek Harness（分别用于 `qg wt -i / -w / -d`）
 
 ## 命令结构
 
 ```text
 qg
 ├── cmt             AI 生成 commit message（-v / -e / -p）
-├── gmt <branch>    快速分支同步：合并当前分支到目标分支并推送
+├── gmt <branch>    快速分支同步：合并当前分支到目标分支并推送（-b 触发构建）
 ├── from            查看当前分支来源信息（来源 / 切出时间）
 ├── p <备注>         提交所有修改并推送
-├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy）
+├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy / -d DSH）
 ├── run <脚本>       执行 Go 脚本（--timeout 秒数；脚本目录 ~/.qg/scripts/）
 └── rm              删除当前分支及对应工作树（-o 连远程分支一起删 / --force 强制）
 ```
 
-直接运行 `qg` 会显示命令帮助。
+直接运行 `qg` 或 `qg --help` 会显示命令帮助；`qg <命令> --help` 查看单个命令的旗标。
 
 ## 安装
 
@@ -39,30 +48,33 @@ chmod +x qg-darwin-arm64
 sudo mv qg-darwin-arm64 /usr/local/bin/qg
 ```
 
+可选平台包：`qg-darwin-amd64.tar.gz`、`qg-darwin-arm64.tar.gz`、`qg-linux-amd64.tar.gz`、`qg-linux-arm64.tar.gz`。
+
 **方式二：源码编译**
 
 ```bash
 git clone https://github.com/zfslalala/cmt.git
 cd cmt
-make install
+make install                 # 安装到 /usr/local/bin
+
+# 或安装到用户目录，避免 sudo（确保 $HOME/.local/bin 在 PATH 中）
+make install PREFIX=$HOME/.local
 ```
 
 **方式三：Go install**
 
 ```bash
 go install github.com/zfslalala/cmt/cmd@latest
-# 安装后重命名为 qg
-mv $(go env GOPATH)/bin/cmt $(go env GOPATH)/bin/qg
+# go install 以目录名命名产物，即 $GOPATH/bin/cmd，重命名为 qg
+mv "$(go env GOPATH)/bin/cmd" "$(go env GOPATH)/bin/qg"
 ```
-
----
 
 ### Windows
 
 **方式一：下载预编译版本**
 
-1. 从 [Releases](https://github.com/zfslalala/cmt/releases) 下载 `qg-windows-amd64.exe`
-2. 改名为 `qg.exe`
+1. 从 [Releases](https://github.com/zfslalala/cmt/releases) 下载 `qg-windows-amd64.zip`
+2. 解压得到 `qg-windows-amd64.exe`，改名为 `qg.exe`
 3. 放到 `C:\Windows\System32\` 或其他 PATH 目录
 
 **方式二：源码编译**
@@ -74,8 +86,6 @@ go build -ldflags="-s -w" -o qg.exe ./cmd
 # 把 qg.exe 移到 PATH 目录
 ```
 
----
-
 ### 验证安装
 
 ```bash
@@ -84,7 +94,69 @@ qg --help
 
 ## 使用
 
-### 快速分支同步（无需配置）
+### 创建工作树（`qg wt`）
+
+```bash
+# 基于当前 HEAD 创建分支 feature/login，并在仓库同级目录创建工作树
+qg wt feature/login
+
+# 从线上最新 release 切出（先 fetch origin/release，再以 origin/release 为起点）
+qg wt feature/login --from release
+
+# 创建后在 IntelliJ IDEA 中打开
+qg wt feature/login -i
+
+# 创建后在 WorkBuddy 中打开（新任务草稿）
+qg wt feature/login -w
+
+# 创建后在 DeepSeek Harness 中打开（新 Web 实例）
+qg wt feature/login -d
+```
+
+#### 起点选择
+
+优先级从高到低：
+
+1. `--from <分支>`：先 `git fetch origin <分支>` 取线上最新，再以 `origin/<分支>` 为起点；远端没有时回退本地同名分支；远端和本地都没有则报错。
+2. `qg.hjson` 中的 `wt.base`：适合把团队的集成分支（如 `release`）设为默认起点。
+3. 当前 `HEAD`。
+
+```hjson
+{
+  wt: {
+    base: release
+  }
+}
+```
+
+`--from` 也可以直接写 `origin/release`，效果相同。
+
+新分支**不会继承起点分支的 upstream**。从 `release` 切出的 `feature/login` 不会跟踪 `origin/release`；首次 `qg p` / `qg cmt -p` 会自动以 `origin/feature/login` 建立跟踪，避免误推到起点分支。
+
+#### 目录与分支规则
+
+- 工作树创建在当前执行目录的**同级目录**，目录名由分支名转换而来：`/`、`\`、空格以及 Windows 非法字符都会替换为 `-`。例如 `feature/login` → `../feature-login`。
+- 分支已存在时拒绝创建，避免误操作已有分支；可用 `git worktree add <路径> <已有分支>` 为已有分支补工作树。
+- 分支已在任意工作树中检出时拒绝创建。
+- 目标目录已存在时拒绝创建。
+- **建议在仓库根目录执行**。若在子目录执行，工作树会建在该子目录的同级目录（可能落在仓库内部），容易与主工作区互相干扰。
+
+#### 打开方式
+
+| 旗标 | 行为 | 依赖 |
+|---|---|---|
+| `-i, --idea` | 用 IntelliJ IDEA 打开工作树 | 本机安装 IDEA（PATH 中的 `idea`、Toolbox 脚本或 `/Applications/IntelliJ IDEA*.app`） |
+| `-w, --workbuddy` | 通过 `workbuddy://task?action=start&cwd=...` 新建 WorkBuddy 任务草稿 | 安装 WorkBuddy 并注册 URL 协议 |
+| `-d, --dsh` | 在工作树中执行 `dsh web --port 0`，以该工作树为默认目录并自动打开浏览器 | PATH 中有 `dsh` 命令（可在 DeepSeek Harness 菜单「管理 dsh 命令…」中安装） |
+
+说明：
+
+- `-d` 启动的是一个**独立的 DSH Web 实例**，不会在已经运行的 DSH Desktop 窗口中自动新建或选中工作区；端口交给系统分配，可以同时为多个工作树打开多个实例。
+- 全新 DSH Web 首次打开时可能还没有选中任何工作区，需要在页面中把该工作树添加为工作区（目录选择器会从该工作树开始）。
+- 打开失败（例如未安装 IDEA / WorkBuddy / dsh）只打印警告，**工作树仍会保留**，不会回滚已创建的分支。
+- 多个旗标可以同时使用，例如 `qg wt feature/login -i -d`。
+
+### 快速分支同步（`qg gmt`）
 
 ```bash
 # 将当前分支合并到 test 分支，推送 test 后回到当前分支
@@ -94,11 +166,13 @@ qg gmt test
 qg gmt test -b
 ```
 
-- 如果目标分支已在其他 worktree 中打开，会直接在该 worktree 中合并并推送。
-- 同步前要求当前工作区没有未提交变更；如果目标分支所在 worktree 有未提交变更，也会停止执行。
-- 合并冲突时会自动回滚失败的自动合并，并提示你手动合并：
-  - 目标分支不在 worktree 中时，会切到目标分支并停留在那里，提示手动执行 `git merge <源分支>`。
-  - 目标分支已在 worktree 中时，会提示该 worktree 的路径，进入该目录手动执行合并。
+行为说明：
+
+- 目标分支必须在本地存在；当前分支不能与目标分支相同。
+- 当前工作区必须没有未提交变更。
+- 如果目标分支已在其他 worktree 中打开，会直接在该 worktree 中执行同步；该 worktree 也必须干净。
+- 同步流程：目标分支 `pull` 最新（未设置 upstream 时跳过）→ 合并当前分支 → 推送目标分支 → 回到当前分支。合并或拉取产生冲突时会自动回滚冲突现场，并提示手动处理。
+- 目标分支不在 worktree 中时，冲突后会停留在目标分支并提示手动执行 `git merge <源分支>`；目标分支在 worktree 中时，会提示该 worktree 的路径。
 
 #### 构建触发（`-b`）
 
@@ -124,6 +198,7 @@ qg gmt test -b
 
 - `curl` 数组中的命令会**依次执行**；单条失败会明确告知（含命令与错误），并继续执行后续命令。
 - 成功判定为**命令退出码 0**；`curl` 命令会自动注入 `-f`，HTTP 4xx/5xx 判为失败（2xx/3xx 算成功）。非 curl 命令仍按退出码判定。
+- 每条命令超时 30 秒，超时会终止整个进程组，避免留下孤儿进程。
 - 构建触发失败只警告，不影响已完成的合并推送，退出码仍为 0。
 - 分支未配置时提示跳过；`qg.hjson` 已加入 `.gitignore`，token 不会入库。
 
@@ -144,33 +219,88 @@ qg gmt test -b
 }
 ```
 
-```bash
-# 安装到用户目录，避免 sudo
-make install PREFIX=$HOME/.local
-```
-
-### AI 生成 commit message（需配置）
+### AI 生成 commit message（`qg cmt`，需配置）
 
 ```bash
-# 生成 commit message（精简模式）
+# 生成 commit message（精简模式，只输出，不提交）
 qg cmt
 
 # 生成详细模式的 commit message
 qg cmt -v
 
-# 编辑确认后再提交
+# 编辑确认后提交
 qg cmt -e
 
-# 一键提交并推送
+# 提交并推送
 qg cmt -p
 
 # 编辑确认后提交并推送（完整流程）
 qg cmt -e -p
 ```
 
-暂存区为空时会自动暂存所有变更后再生成。
+- 暂存区为空时会自动 `git add .`（从仓库根暂存全部变更）后再生成。
+- 不带 `-e` / `-p` 时只打印 message，不创建提交。
+- `-e` 会在打印后等待输入：直接回车沿用生成的 message；输入新内容后以空行结束。加了 `-e` 就会提交。
+- `-p` 会提交并推送当前分支；推送失败时本地提交已保留，可修复后手动 push。
+- 提交 diff 超过 500 行时会被截断后再发送给模型。
 
-### 查看分支来源（无需配置）
+### 提交所有修改并推送（`qg p`）
+
+```bash
+# 提交信息为 "fix: 登录超时"
+qg p "fix: 登录超时"
+
+# 多个参数会以空格拼接为提交信息
+qg p fix login timeout
+```
+
+- 从仓库根执行 `git add .`，暂存整个仓库的变更。
+- 没有未提交变更时报错退出。
+- 提交后推送当前分支；分支没有 upstream 时自动 `git push -u origin <分支>`。
+
+### 删除当前分支及工作树（`qg rm`）
+
+```bash
+# 删除当前分支；若分支检出于工作树，一并删除工作树
+qg rm
+
+# 同时删除远程同名分支（会先要求确认）
+qg rm -o
+
+# 强制删除：脏工作树、未合并分支也删
+qg rm --force
+```
+
+- 固定删除**当前所在分支**，不接受分支名参数。
+- 若分支检出于主仓库：先切换到本地默认分支（优先 `main`，其次 `master`）再删除；主仓库有未提交变更时拒绝切换。
+- 若分支检出于链接工作树：先 `git worktree remove` 再删分支；工作树有未提交变更时默认拒绝（`--force` 可强制）。
+- 本地删除默认使用 `git branch -d`，未合并的分支会被拒绝；`--force` 改用 `-D`。
+- `-o` 会先打印待删除的本地/远程分支并等待 `y` 确认；远程删除失败只警告，本地删除结果不受影响。
+- 删除工作树后，如果当前终端仍位于被删目录内，请先 `cd` 出来。
+
+### 执行 Go 脚本（`qg run`）
+
+```bash
+# 执行 ~/.qg/scripts/deploy.go
+qg run deploy
+
+# 执行显式路径的脚本，并透传参数
+qg run ./scripts/check.go --env test
+
+# 限制运行时长为 300 秒（选项必须写在脚本名之前）
+qg run --timeout 300 deploy
+
+# 用 -- 结束 qg 选项，后续参数全部透传给脚本
+qg run -- deploy --timeout 10
+```
+
+- 脚本按路径解析：名字含 `/`、`\` 或以 `.go` 结尾时视为显式路径（自动补 `.go`）；否则到脚本目录找 `<名字>.go`。
+- 脚本目录默认 `~/.qg/scripts`，可用 `QG_SCRIPTS_DIR` 覆盖。
+- 执行方式：先 `go build` 到临时目录，再运行产物——真实透传脚本的 stdout/stderr/stdin 和退出码（`go run` 会把退出码压成 1）。
+- `--timeout` 只限制脚本运行阶段，不限制编译；超时会终止整个进程组。默认不限时。
+- 选项必须放在脚本名之前；脚本名之后的参数原样透传。
+
+### 查看分支来源（`qg from`）
 
 ```bash
 # 查看当前分支的来源分支与切出时间
@@ -186,18 +316,19 @@ qg from
 ```
 
 - **来源 / 切出**：基于 reflog 最早一条记录推断（reflog 默认保留 90 天，超出后无法查到）；从初始状态切出的分支来源显示为 `HEAD`。
+- Git 无法可靠记录分支的真实父分支，此命令是推断而非权威信息。
 
-## 配置（仅 `qg cmt` 需要）
+## 配置
 
-### 配置项
+### `qg cmt` 配置
 
 | 变量 | 必填 | 默认值 | 说明 |
 |---|---|---|---|
 | `CMT_API_KEY` | 是 | - | 大模型服务的 API Key |
-| `CMT_API_URL` | 否 | `https://api.openai.com/v1` | API Base URL，使用其他兼容服务时填对应地址 |
+| `CMT_API_URL` | 否 | `https://api.openai.com/v1` | API Base URL；使用其他兼容服务时填对应地址 |
 | `CMT_MODEL` | 否 | `gpt-4o-mini` | 模型名称 |
 
-### 环境变量
+环境变量：
 
 ```bash
 export CMT_API_KEY="your-api-key"
@@ -205,9 +336,12 @@ export CMT_API_URL="https://api.openai.com/v1"
 export CMT_MODEL="gpt-4o-mini"
 ```
 
-### .env 文件
+`.env` 文件（从高到低，先加载的优先；系统环境变量始终优先）：
 
-在项目目录或用户主目录创建 `.cmt.env` 文件（系统环境变量优先于文件）：
+1. `~/.cmt.env`
+2. `~/.env`
+3. `./.cmt.env`（当前目录）
+4. `./.env`（当前目录）
 
 ```bash
 CMT_API_KEY=your-api-key
@@ -215,42 +349,132 @@ CMT_API_URL=https://api.openai.com/v1
 CMT_MODEL=gpt-4o-mini
 ```
 
+#### Anthropic
+
+`CMT_API_URL` 中包含 `anthropic` 时，客户端改用 Anthropic Messages API（`/v1/messages`）：
+
+```bash
+export CMT_API_KEY="sk-ant-..."
+export CMT_API_URL="https://api.anthropic.com"
+export CMT_MODEL="claude-sonnet-4-5"
+```
+
+其他服务只要兼容 OpenAI 的 `/chat/completions` 协议即可直接使用。注意：Anthropic 兼容代理如果 URL 里不含 `anthropic`，会被当作 OpenAI 协议调用。
+
+### `qg.hjson`（构建触发 / 工作树默认起点）
+
+`qg.hjson` 放在**仓库根目录**，采用 HJSON 解析，支持标准 JSON 写法。该文件已被 `.gitignore` 忽略，适合放 CI token。
+
+```hjson
+{
+  // qg gmt <branch> -b 时按分支执行
+  builds: {
+    test: {
+      curl: [
+        "curl -X POST 'https://jenkins.example.com/job/test/build?token=xxx'"
+      ]
+    }
+  }
+
+  // qg wt 不带 --from 时的默认起点
+  wt: {
+    base: release
+  }
+}
+```
+
+- `builds` 的 key 是目标分支名，`curl` 是要执行的命令数组。
+- `wt.base` 读取失败或格式错误时只告警，`qg wt` 会退回到当前 `HEAD`。
+- 文件不存在时所有相关功能跳过，不会报错。
+
+### 环境变量汇总
+
+| 变量 | 作用 |
+|---|---|
+| `CMT_API_KEY` | `qg cmt` 的 API Key（必填） |
+| `CMT_API_URL` | `qg cmt` 的 API Base URL |
+| `CMT_MODEL` | `qg cmt` 使用的模型 |
+| `QG_SCRIPTS_DIR` | `qg run` 的脚本目录，默认 `~/.qg/scripts` |
+
 ## 开发
 
 ```bash
 # 安装依赖
 go mod download
 
-# 编译
+# 编译到 bin/qg
 make build
 
 # 运行测试
 make test
 
-# 交叉编译
+# 直接运行（不产出二进制）
+make dev
+
+# 交叉编译所有平台
 make build-all
 
-# 打包发布
+# 打包发布（在 bin/ 生成压缩包）
 make release
 ```
 
 ### 项目结构
 
 ```text
-cmd/             入口（main.go，package main）
-cmd/cmt/         命令实现（package cmt：root 命令树 / cmt / gmt / from）
-internal/git     Git 命令封装（状态、变更、worktree、分支同步）
-internal/build   构建触发（qg.hjson 解析 + 命令执行）
-internal/llm     LLM API 客户端（OpenAI 兼容 / Anthropic）
-internal/prompt  Prompt 构造
-pkg/config       配置加载
+cmd/main.go              程序入口
+cmd/cmt/                 命令实现（package cmt）
+  root.go                命令树与旗标注册
+  cmt.go                 AI 生成 commit message
+  gmt.go                 分支同步与构建触发
+  from.go                分支来源
+  p.go                   暂存、提交并推送
+  wt.go                  创建工作树
+  run.go                 运行 Go 脚本
+  rm.go                  删除分支与工作树
+internal/git/            Git 命令封装（状态、变更、worktree、分支同步、删除、reflog）
+internal/build/          qg.hjson 解析与构建命令执行
+internal/runner/         qg run 的脚本解析、编译与执行
+internal/idea/           IntelliJ IDEA 检测与启动
+internal/workbuddy/      WorkBuddy 深链接
+internal/dsh/            在指定目录启动 dsh web
+internal/llm/            LLM API 客户端（OpenAI 兼容 / Anthropic）
+internal/prompt/         commit message Prompt 构造
+internal/proc/           跨平台进程组管理（超时终止子进程树）
+pkg/config/              环境变量与 .env 配置加载
 ```
+
+## 常见问题
+
+**`qg wt` 提示目标目录已存在 / 分支已存在**
+
+工具不会覆盖已有目录或分支。删除目标目录，或为已有分支手动执行 `git worktree add <路径> <分支>`。
+
+**`qg wt -i` 提示未检测到 IntelliJ IDEA**
+
+已创建的工作树不会回滚。安装 IDEA 或 JetBrains Toolbox 后重试，也可以手动用 IDE 打开输出的工作树路径。
+
+**`qg wt -w` 提示无法打开 WorkBuddy**
+
+确认 WorkBuddy 已安装并注册了 `workbuddy://` 协议。工作树仍然创建成功。
+
+**`qg wt -d` 提示未检测到 dsh 命令**
+
+在 DeepSeek Harness 菜单中选择「管理 dsh 命令…」安装，或把 `dsh` 放到 PATH 中。`-d` 启动的是独立的 DSH Web 实例，不会接管已运行的 Desktop 窗口。
+
+**`qg gmt` 合并冲突**
+
+自动合并已回滚。按终端提示进入目标分支或对应 worktree，手动执行 `git merge <源分支>`，解决冲突后 `git add`、`git commit`、`git push`。
+
+**`qg from` 显示来源未知**
+
+reflog 默认只保留 90 天；分支创建时间更早、reflog 被清理或分支是通过其他方式创建时无法推断。
 
 ## 支持的模型服务
 
 - Anthropic (Claude)
 - OpenAI
 - Azure OpenAI
+- DeepSeek
 - 智谱 AI (GLM)
 - 通义千问
 - 文心一言

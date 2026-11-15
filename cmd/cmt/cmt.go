@@ -98,12 +98,10 @@ func readMultiline(r io.Reader) (string, error) {
 	var lines []string
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" && len(lines) > 0 {
+		if line == "" {
 			break
 		}
-		if line != "" {
-			lines = append(lines, line)
-		}
+		lines = append(lines, line)
 	}
 	if err := scanner.Err(); err != nil {
 		return "", err

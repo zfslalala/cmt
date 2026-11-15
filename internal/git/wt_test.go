@@ -1,6 +1,10 @@
 package git
 
-import "testing"
+import (
+	"os/exec"
+	"strings"
+	"testing"
+)
 
 func TestSanitizeBranchName(t *testing.T) {
 	cases := map[string]string{
@@ -16,5 +20,61 @@ func TestSanitizeBranchName(t *testing.T) {
 		if got := SanitizeBranchName(input); got != want {
 			t.Errorf("SanitizeBranchName(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+// 从 release 切出的新分支不应继承 origin/release 作为 upstream，
+// 否则 git push 会尝试推到起点分支。
+func TestCreateWorktreeDoesNotTrackStartPoint(t *testing.T) {
+	repo := rmTestRepo(t)
+	runIn := func(wd string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = wd
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return string(out)
+	}
+
+	runIn(repo, "checkout", "-q", "-b", "release")
+	writeFile(t, repo+"/release.txt", "release")
+	runIn(repo, "add", ".")
+	runIn(repo, "commit", "-q", "-m", "release")
+	runIn(repo, "push", "-q", "-u", "origin", "release")
+	runIn(repo, "checkout", "-q", "main")
+
+	chdir(t, repo)
+	path, start, err := CreateWorktree("feat/from-release", "release")
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+	if start != "origin/release" {
+		t.Fatalf("resolvedStart = %q, want origin/release", start)
+	}
+
+	upstream := func() (string, bool) {
+		cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+		cmd.Dir = path
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", false
+		}
+		return strings.TrimSpace(string(out)), true
+	}
+
+	if got, ok := upstream(); ok {
+		t.Fatalf("新分支不应有 upstream，实际为 %q", got)
+	}
+
+	// 首次推送应绑定到 origin/<新分支>，而不是 origin/release
+	chdir(t, path)
+	if err := Push(); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	mergeRef := strings.TrimSpace(runIn(path, "config", "--get", "branch.feat/from-release.merge"))
+	if mergeRef != "refs/heads/feat/from-release" {
+		t.Fatalf("upstream merge = %q, want refs/heads/feat/from-release", mergeRef)
 	}
 }

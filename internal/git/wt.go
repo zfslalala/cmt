@@ -62,6 +62,13 @@ func CreateWorktree(branch, startPoint string) (string, string, error) {
 	if _, err := runGit(args...); err != nil {
 		return "", "", err
 	}
+
+	// 新分支不应继承起点分支的 upstream（例如从 release 切出时
+	// git worktree add 会自动跟踪 origin/release），否则首次 push 会
+	// 尝试推到起点分支。清空后由 qg p / qg cmt -p 首次 push -u 绑定
+	// 到 origin/<新分支>。没有 upstream 时该命令会失败，忽略即可。
+	_, _ = runGit("branch", "--unset-upstream", branch)
+
 	return target, resolvedStart, nil
 }
 
