@@ -64,6 +64,7 @@ func Execute() {
 	wtCmd.Flags().BoolVarP(&wtOpenWorkBuddy, "workbuddy", "w", false, "创建后在 WorkBuddy 中打开工作树（新任务草稿）")
 	wtCmd.Flags().BoolVarP(&wtOpenDSH, "dsh", "d", false, "创建后在 DSH Desktop 中打开工作树并创建工作区")
 	wtCmd.Flags().StringVar(&wtFrom, "from", "", "新分支的起点分支（fetch 远端最新后切出，如 release）")
+	wtCmd.Flags().StringVarP(&wtNote, "note", "n", "", "本需求一句话说明，写进工作树的 AGENTS.local.md")
 
 	runCmd := &cobra.Command{
 		Use:                "run <脚本> [参数...]",
@@ -98,7 +99,37 @@ func Execute() {
 	rmCmd.Flags().BoolVarP(&rmRemote, "origin", "o", false, "同时删除远程 origin 上的同名分支")
 	rmCmd.Flags().BoolVar(&rmForce, "force", false, "强制删除：脏工作树、未合并分支也删")
 
-	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd, wtCmd, runCmd, rmCmd)
+	kbCmd := &cobra.Command{
+		Use:           "kb",
+		Short:         "知识库挂载与状态",
+		Long:          "知识库放在仓库之外，通过符号链接挂载到工作树，让每个工作树的 AI 复用同一份项目知识。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+	}
+
+	kbAttachCmd := &cobra.Command{
+		Use:           "attach [工作树路径]",
+		Short:         "把知识库挂载到工作树",
+		Long:          "在当前（或指定）工作树创建 AGENTS.md 与 .dsh 链接、合成技能视图，并把挂载物写入 git info/exclude。主工作树直接指向基座，特性分支使用合成视图。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.MaximumNArgs(1),
+		RunE:          runKbAttach,
+	}
+
+	kbStatusCmd := &cobra.Command{
+		Use:           "status",
+		Short:         "查看各工作树的挂载状态",
+		Long:          "列出当前仓库全部工作树是否已挂载知识库，不修改任何文件。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.NoArgs,
+		RunE:          runKbStatus,
+	}
+
+	kbCmd.AddCommand(kbAttachCmd, kbStatusCmd)
+
+	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd, wtCmd, runCmd, rmCmd, kbCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		var conflictErr *git.MergeConflictError

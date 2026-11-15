@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zfslalala/cmt/internal/dsh"
 	"github.com/zfslalala/cmt/internal/git"
+	"github.com/zfslalala/cmt/internal/kb"
 )
 
 var (
@@ -37,6 +38,13 @@ func runRm(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// 先记下分支知识目录：工作树删掉后就无法再从目录反查它属于哪个分支。
+	var kbLayout kb.Layout
+	hasKB := false
+	if layout, layoutErr := kb.Resolve("."); layoutErr == nil && !layout.IsMain {
+		kbLayout, hasKB = layout, true
+	}
+
 	res, err := git.DeleteBranch(branch, rmRemote, rmForce)
 	if err != nil {
 		return err
@@ -55,6 +63,20 @@ func runRm(cmd *cobra.Command, args []string) error {
 	}
 	if res.RemoteMessage != "" {
 		fmt.Fprintln(os.Stderr, res.RemoteMessage)
+	}
+
+	// 分支知识目录：空的直接清掉，有内容就保留并告知位置，避免误删经验。
+	if res.WorktreePath != "" && hasKB {
+		removed, kbErr := kb.CleanupBranchKnowledge(kbLayout)
+		switch {
+		case kbErr != nil:
+			fmt.Fprintf(os.Stderr, "⚠ 清理分支知识失败: %v\n", kbErr)
+		case removed:
+			fmt.Printf("已清理空的分支知识目录: %s\n", kbLayout.Branch)
+		default:
+			fmt.Printf("分支知识已保留: %s\n", kbLayout.Branch)
+			fmt.Println("（有实际内容，确认无需保留后自行删除）")
+		}
 	}
 
 	// 工作树删除后，同步移除 DSH 中指向它的工作区。DSH 未运行或未安装
