@@ -10,10 +10,11 @@ import (
 
 	"github.com/hjson/hjson-go/v4"
 	"github.com/zfslalala/cmt/internal/git"
+	"github.com/zfslalala/cmt/internal/kb"
 	"github.com/zfslalala/cmt/internal/proc"
 )
 
-// Config 对应仓库根 qg.hjson 的结构
+// Config 对应 qg.hjson 的结构（仓库根或知识库项目基座）
 type Config struct {
 	Builds map[string]Entry `json:"builds"`
 	Wt     struct {
@@ -30,28 +31,69 @@ type Entry struct {
 // commandTimeout 单条命令的超时时间
 const commandTimeout = 30 * time.Second
 
-// Load 从 git 仓库根读取 qg.hjson;文件不存在时返回 (nil, nil)。
+// Load 读取 qg.hjson 配置；两处候选文件都不存在时返回 (nil, nil)。
+//
+// 查找顺序：当前工作树根目录 → 知识库中该项目基座
+// （<_ai-kb>/projects/<项目>/base）。工作树里的 qg.hjson 被 git 忽略，
+// 特性分支工作树通常没有该文件，于是回退到项目基座，避免每建一个工作树
+// 都要复制一份带 CI token 的配置。
+//
 // 使用 HJSON 解析(JSON 超集):兼容标准 JSON 写法,
 // 并支持三引号多行字符串,可直接粘贴浏览器复制的 curl 命令而无需转义。
 func Load() (*Config, error) {
-	root, err := git.RepoRoot()
+	path, err := configPath()
 	if err != nil {
-		return nil, fmt.Errorf("定位仓库根失败: %w", err)
+		return nil, err
+	}
+	if path == "" {
+		return nil, nil
 	}
 
-	data, err := os.ReadFile(filepath.Join(root, "qg.hjson"))
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("读取 %s 失败: %w", path, err)
 	}
 
 	var cfg Config
 	if err := hjson.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("解析 qg.hjson 失败: %w", err)
+		return nil, fmt.Errorf("解析 %s 失败: %w", path, err)
 	}
 	return &cfg, nil
+}
+
+// configPath 返回实际使用的 qg.hjson 路径；两处都没有时返回空串。
+// 仓库根优先于知识库基座，保证单个项目可以覆盖共享配置。
+func configPath() (string, error) {
+	root, err := git.RepoRoot()
+	if err != nil {
+		return "", fmt.Errorf("定位仓库根失败: %w", err)
+	}
+
+	local := filepath.Join(root, "qg.hjson")
+	if isFile(local) {
+		return local, nil
+	}
+
+	base, err := kb.BaseDir(root)
+	if err != nil {
+		return "", fmt.Errorf("定位知识库项目目录失败: %w", err)
+	}
+
+	fallback := filepath.Join(base, "qg.hjson")
+	if isFile(fallback) {
+		return fallback, nil
+	}
+
+	return "", nil
+}
+
+// isFile 判断路径存在且是普通文件（目录不算命中）。
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // WorktreeBase 读取 qg.hjson 中 wt.base 配置（新分支默认起点）。

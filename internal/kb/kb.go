@@ -93,13 +93,9 @@ func Resolve(dir string) (Layout, error) {
 		return layout, fmt.Errorf("当前目录不是 Git 仓库: %w", err)
 	}
 
-	paths, err := git.WorktreePaths(worktree)
+	main, err := mainWorktreeIn(worktree)
 	if err != nil {
 		return layout, err
-	}
-	main, err := filepath.Abs(paths[0])
-	if err != nil {
-		return layout, fmt.Errorf("解析主工作树路径失败: %w", err)
 	}
 
 	project, err := projectKey(main)
@@ -132,6 +128,48 @@ func Resolve(dir string) (Layout, error) {
 	}
 
 	return layout, nil
+}
+
+// BaseDir 返回目录所属项目在知识库里的基座目录（<根>/projects/<项目>/base）。
+// 只定位项目级位置，不要求当前分支可解析，供只需要项目级配置的调用方使用。
+// 目录不在 Git 仓库中时返回错误；基座目录本身不保证已存在。
+func BaseDir(dir string) (string, error) {
+	worktree, err := git.RepoRootIn(dir)
+	if err != nil {
+		return "", fmt.Errorf("当前目录不是 Git 仓库: %w", err)
+	}
+
+	main, err := mainWorktreeIn(worktree)
+	if err != nil {
+		return "", err
+	}
+
+	project, err := projectKey(main)
+	if err != nil {
+		return "", err
+	}
+
+	root, err := rootDir(main)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, "projects", project, baseDirName), nil
+}
+
+// mainWorktreeIn 返回主工作树的绝对路径；git worktree list 的首项即主工作树。
+func mainWorktreeIn(worktree string) (string, error) {
+	paths, err := git.WorktreePaths(worktree)
+	if err != nil {
+		return "", err
+	}
+
+	main, err := filepath.Abs(paths[0])
+	if err != nil {
+		return "", fmt.Errorf("解析主工作树路径失败: %w", err)
+	}
+
+	return main, nil
 }
 
 // projectKey 决定项目键：优先读仓库本地的 info/kb-project，
