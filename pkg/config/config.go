@@ -1,13 +1,11 @@
+// Package config 定义 qg 的运行时配置值与默认值。
+//
+// 配置的唯一来源是 qg.hjson（查找顺序见 internal/build.Load：当前工作树根，
+// 缺失时回退知识库项目基座）。本包只定义配置值与默认值，
+// 不关心配置文件落在哪里、如何解析，也不做校验。
 package config
 
-import (
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"github.com/joho/godotenv"
-)
-
+// Config 是一次调用所需的大模型配置。
 type Config struct {
 	APIKey      string
 	APIBase     string
@@ -16,54 +14,19 @@ type Config struct {
 	MaxTokens   int
 }
 
-func Load() (*Config, error) {
-	// 加载 .env 文件
-	loadEnvFiles()
+// 大模型配置的默认值；qg.hjson 的 cmt 段未配置对应字段时使用。
+const (
+	DefaultAPIBase = "https://api.openai.com/v1"
+	DefaultModel   = "gpt-4o-mini"
+)
 
-	cfg := &Config{
-		APIKey:      getEnv("CMT_API_KEY", ""),
-		APIBase:     getEnv("CMT_API_URL", "https://api.openai.com/v1"),
-		Model:       getEnv("CMT_MODEL", "gpt-4o-mini"),
+// Default 返回带默认值的大模型配置。APIKey 没有默认值，由调用方
+// 从 qg.hjson 的 cmt.apiKey 提供，缺失时必须显式报错。
+func Default() Config {
+	return Config{
+		APIBase:     DefaultAPIBase,
+		Model:       DefaultModel,
 		Temperature: 0.7,
 		MaxTokens:   1000,
 	}
-
-	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("CMT_API_KEY 未设置，请在环境变量或 .env 文件中配置")
-	}
-
-	return cfg, nil
-}
-
-// loadEnvFiles 按优先级加载 .env 文件。
-// godotenv.Load 不会覆盖已存在的环境变量，因此先加载的文件优先生效：
-// 系统环境变量 > ~/.cmt.env > ~/.env > ./.cmt.env > ./.env
-func loadEnvFiles() {
-	home := ""
-	if h, err := os.UserHomeDir(); err == nil {
-		home = h
-	}
-	locations := []string{}
-	if home != "" {
-		locations = append(locations,
-			filepath.Join(home, ".cmt.env"), // 用户 home 目录
-			filepath.Join(home, ".env"),     // 用户 home 目录
-		)
-	}
-	locations = append(locations,
-		".cmt.env", // 当前目录（项目配置）
-		".env",     // 当前目录
-	)
-
-	for _, loc := range locations {
-		// godotenv.Load 不会覆盖已存在的环境变量，因此系统环境变量优先
-		_ = godotenv.Load(loc)
-	}
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

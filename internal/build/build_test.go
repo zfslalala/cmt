@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/zfslalala/cmt/pkg/config"
 )
 
 // initRepo 在 parent 下创建仓库 name 并提交一次，返回仓库根目录。
@@ -167,5 +169,68 @@ func TestLoadReturnsNilWhenNoConfigAnywhere(t *testing.T) {
 	}
 	if cfg != nil {
 		t.Fatalf("两处都没有 qg.hjson 时应返回 nil，实际 %+v", cfg)
+	}
+}
+
+func TestLoadReadsCmtSection(t *testing.T) {
+	parent := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(parent); err == nil {
+		parent = resolved
+	}
+	t.Setenv("AI_KB_ROOT", "")
+
+	repo := initRepo(t, parent, "demo")
+	content := `{"cmt":{"apiKey":"test-key","apiUrl":"https://llm.example.com/v1","model":"test-model"}}`
+	if err := os.WriteFile(filepath.Join(repo, "qg.hjson"), []byte(content), 0o644); err != nil {
+		t.Fatalf("写入 qg.hjson 失败: %v", err)
+	}
+
+	chdir(t, repo)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load 失败: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("期望读取到 qg.hjson，实际为 nil")
+	}
+	if cfg.Cmt.APIKey != "test-key" || cfg.Cmt.APIUrl != "https://llm.example.com/v1" || cfg.Cmt.Model != "test-model" {
+		t.Fatalf("cmt 段解析结果不符: %+v", cfg.Cmt)
+	}
+}
+
+func TestLLMConfigUsesQGHjsonValues(t *testing.T) {
+	cfg := &Config{Cmt: Cmt{APIKey: "k", APIUrl: "https://llm.example.com", Model: "m"}}
+
+	got := cfg.LLMConfig()
+	if got.APIKey != "k" || got.APIBase != "https://llm.example.com" || got.Model != "m" {
+		t.Fatalf("期望使用 qg.hjson 的值，实际 %+v", got)
+	}
+}
+
+func TestLLMConfigFillsDefaultsForMissingFields(t *testing.T) {
+	cfg := &Config{Cmt: Cmt{APIKey: "k"}}
+
+	got := cfg.LLMConfig()
+	if got.APIKey != "k" {
+		t.Fatalf("apiKey = %q", got.APIKey)
+	}
+	if got.APIBase != config.DefaultAPIBase || got.Model != config.DefaultModel {
+		t.Fatalf("期望补齐默认值，实际 %+v", got)
+	}
+	if got.Temperature != 0.7 || got.MaxTokens != 1000 {
+		t.Fatalf("默认温度/最大 token 不符: %+v", got)
+	}
+}
+
+func TestLLMConfigOnNilConfig(t *testing.T) {
+	var cfg *Config
+
+	got := cfg.LLMConfig()
+	if got.APIKey != "" {
+		t.Fatalf("未读取到配置时 apiKey 应为空，实际 %q", got.APIKey)
+	}
+	if got.APIBase != config.DefaultAPIBase || got.Model != config.DefaultModel {
+		t.Fatalf("期望返回默认值，实际 %+v", got)
 	}
 }

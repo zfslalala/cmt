@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zfslalala/cmt/internal/build"
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/llm"
 	"github.com/zfslalala/cmt/internal/prompt"
@@ -21,13 +22,13 @@ var (
 )
 
 func runCMT(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("配置加载失败: %w", err)
-	}
-
 	if !git.IsGitRepo() {
 		return fmt.Errorf("当前目录不是 Git 仓库")
+	}
+
+	cfg, err := loadLLMConfig()
+	if err != nil {
+		return err
 	}
 
 	changes, err := git.GetStagedChanges()
@@ -89,6 +90,21 @@ func runCMT(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// loadLLMConfig 从 qg.hjson 的 cmt 段读取大模型配置；未配置的 apiUrl / model
+// 用默认值补齐。apiKey 缺失时直接失败，并说明该改哪个文件。
+func loadLLMConfig() (*config.Config, error) {
+	projectCfg, err := build.Load()
+	if err != nil {
+		return nil, fmt.Errorf("读取 qg.hjson 失败: %w", err)
+	}
+
+	cfg := projectCfg.LLMConfig()
+	if cfg.APIKey == "" {
+		return nil, fmt.Errorf("qg.hjson 未配置 cmt.apiKey，请在仓库根（或知识库项目基座）的 qg.hjson 中填写")
+	}
+	return &cfg, nil
 }
 
 // readMultiline 从 r 读取多行输入，空行或 EOF 结束。

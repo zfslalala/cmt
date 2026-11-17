@@ -366,50 +366,49 @@ qg from
 
 ### `qg cmt` 配置
 
-| 变量 | 必填 | 默认值 | 说明 |
+`qg cmt` 的配置写在 `qg.hjson` 的 `cmt` 段，**不再读取环境变量或 `.env`**。文件查找顺序见下一节（仓库根 → 知识库项目基座）：
+
+```hjson
+{
+  cmt: {
+    apiKey: your-api-key                  // 必填
+    apiUrl: https://api.openai.com/v1     // 可选，默认该值
+    model: gpt-4o-mini                    // 可选，默认该值
+  }
+}
+```
+
+| 字段 | 必填 | 默认值 | 说明 |
 |---|---|---|---|
-| `CMT_API_KEY` | 是 | - | 大模型服务的 API Key |
-| `CMT_API_URL` | 否 | `https://api.openai.com/v1` | API Base URL；使用其他兼容服务时填对应地址 |
-| `CMT_MODEL` | 否 | `gpt-4o-mini` | 模型名称 |
+| `cmt.apiKey` | 是 | - | 大模型服务的 API Key |
+| `cmt.apiUrl` | 否 | `https://api.openai.com/v1` | API Base URL；使用其他兼容服务时填对应地址 |
+| `cmt.model` | 否 | `gpt-4o-mini` | 模型名称 |
 
-环境变量：
-
-```bash
-export CMT_API_KEY="your-api-key"
-export CMT_API_URL="https://api.openai.com/v1"
-export CMT_MODEL="gpt-4o-mini"
-```
-
-`.env` 文件（从高到低，先加载的优先；系统环境变量始终优先）：
-
-1. `~/.cmt.env`
-2. `~/.env`
-3. `./.cmt.env`（当前目录）
-4. `./.env`（当前目录）
-
-```bash
-CMT_API_KEY=your-api-key
-CMT_API_URL=https://api.openai.com/v1
-CMT_MODEL=gpt-4o-mini
-```
+- 只需写需要的字段，`apiUrl` / `model` 缺省时用默认值。
+- 没有 `qg.hjson`、或其中缺少 `cmt.apiKey` 时，`qg cmt` 直接报错并提示该改哪个文件。
+- `qg.hjson` 已加入 `.gitignore`，token 不会入库。
 
 #### Anthropic
 
-`CMT_API_URL` 中包含 `anthropic` 时，客户端改用 Anthropic Messages API（`/v1/messages`）：
+`cmt.apiUrl` 中包含 `anthropic` 时，客户端改用 Anthropic Messages API（`/v1/messages`）：
 
-```bash
-export CMT_API_KEY="sk-ant-..."
-export CMT_API_URL="https://api.anthropic.com"
-export CMT_MODEL="claude-sonnet-4-5"
+```hjson
+{
+  cmt: {
+    apiKey: sk-ant-...
+    apiUrl: https://api.anthropic.com
+    model: claude-sonnet-4-5
+  }
+}
 ```
 
 其他服务只要兼容 OpenAI 的 `/chat/completions` 协议即可直接使用。注意：Anthropic 兼容代理如果 URL 里不含 `anthropic`，会被当作 OpenAI 协议调用。
 
-### `qg.hjson`（构建触发 / 工作树默认起点）
+### `qg.hjson`（大模型配置 / 构建触发 / 工作树默认起点）
 
 `qg.hjson` 采用 HJSON 解析，支持标准 JSON 写法。该文件已被 `.gitignore` 忽略，适合放 CI token。
 
-查找顺序（`qg gmt -b` 与 `qg wt` 的默认起点共用）：
+查找顺序（`qg cmt` 的大模型配置、`qg gmt -b` 的构建触发、`qg wt` 的默认起点共用）：
 
 1. **当前工作树根目录**的 `qg.hjson`——项目自己的配置，优先。
 2. **知识库中该项目基座**的 `<知识库>/projects/<项目>/base/qg.hjson`——工作树里没有配置时回退。
@@ -420,6 +419,12 @@ export CMT_MODEL="claude-sonnet-4-5"
 
 ```hjson
 {
+  // qg cmt 调用大模型所需；apiUrl / model 可省略
+  cmt: {
+    apiKey: your-api-key
+    model: gpt-4o-mini
+  }
+
   // qg gmt <branch> -b 时按分支执行
   builds: {
     test: {
@@ -436,17 +441,15 @@ export CMT_MODEL="claude-sonnet-4-5"
 }
 ```
 
+- `cmt.apiKey` 是 `qg cmt` 唯一必填项；`apiUrl` / `model` 缺省时用默认值。
 - `builds` 的 key 是目标分支名，`curl` 是要执行的命令数组。
 - `wt.base` 读取失败或格式错误时只告警，`qg wt` 会退回到当前 `HEAD`。
-- 文件不存在时所有相关功能跳过，不会报错。
+- 文件不存在时：`qg cmt` 报缺少 `cmt.apiKey`，其余功能跳过，不报错。
 
 ### 环境变量汇总
 
 | 变量 | 作用 |
 |---|---|
-| `CMT_API_KEY` | `qg cmt` 的 API Key（必填） |
-| `CMT_API_URL` | `qg cmt` 的 API Base URL |
-| `CMT_MODEL` | `qg cmt` 使用的模型 |
 | `QG_SCRIPTS_DIR` | `qg run` 的脚本目录，默认 `~/.qg/scripts` |
 | `QG_DSH_BRIDGE` | `qg wt -d` 读取的 DSH 桥接文件，默认 `~/.qg/dsh-bridge.json` |
 | `AI_KB_ROOT` | 知识库根目录，默认仓库同级 `_ai-kb`，其次 `~/.ai-kb` |
@@ -490,7 +493,7 @@ cmd/cmt/                 命令实现（package cmt）
   rm.go                  删除分支与工作树
 internal/git/            Git 命令封装（状态、变更、worktree、分支同步、删除、reflog）
 internal/kb/             知识库挂载（符号链接、合成视图、骨架创建）
-internal/build/          qg.hjson 解析与构建命令执行
+internal/build/          qg.hjson 解析（cmt / builds / wt）、构建命令执行
 internal/runner/         qg run 的脚本解析、编译与执行
 internal/idea/           IntelliJ IDEA 检测与启动
 internal/workbuddy/      WorkBuddy 深链接
@@ -498,7 +501,7 @@ internal/dsh/            通过 DSH Desktop 桥接创建并打开工作区
 internal/llm/            LLM API 客户端（OpenAI 兼容 / Anthropic）
 internal/prompt/         commit message Prompt 构造
 internal/proc/           跨平台进程组管理（超时终止子进程树）
-pkg/config/              环境变量与 .env 配置加载
+pkg/config/              大模型配置值与默认值
 dsh-plugin/              qg-dsh-open：DSH Desktop 工作区桥接插件（Host + Client）
 ```
 

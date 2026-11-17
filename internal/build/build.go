@@ -12,6 +12,7 @@ import (
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/kb"
 	"github.com/zfslalala/cmt/internal/proc"
+	"github.com/zfslalala/cmt/pkg/config"
 )
 
 // Config 对应 qg.hjson 的结构（仓库根或知识库项目基座）
@@ -21,6 +22,17 @@ type Config struct {
 		// Base 新分支的默认起点（如 release），qg wt 不带 --from 时使用
 		Base string `json:"base"`
 	} `json:"wt"`
+	Cmt Cmt `json:"cmt"`
+}
+
+// Cmt 对应 qg.hjson 的 cmt 段：qg cmt 调用大模型所需的配置。
+type Cmt struct {
+	// APIKey 大模型服务的 API Key；qg cmt 必需。
+	APIKey string `json:"apiKey"`
+	// APIUrl 大模型服务的 API Base URL；为空时用默认值。
+	APIUrl string `json:"apiUrl"`
+	// Model 模型名称；为空时用默认值。
+	Model string `json:"model"`
 }
 
 // Entry 是单个分支的构建触发配置
@@ -120,6 +132,26 @@ func (c *Config) EntryFor(branch string) (Entry, bool) {
 		return Entry{}, false
 	}
 	return entry, true
+}
+
+// LLMConfig 返回 qg cmt 使用的大模型配置。
+// 取 qg.hjson 的 cmt 段，未配置的 apiUrl / model 用默认值补齐；
+// apiKey 没有默认值，是否缺失由调用方判断并给出可操作的报错。
+func (c *Config) LLMConfig() config.Config {
+	cfg := config.Default()
+	if c == nil {
+		return cfg
+	}
+	if c.Cmt.APIKey != "" {
+		cfg.APIKey = c.Cmt.APIKey
+	}
+	if c.Cmt.APIUrl != "" {
+		cfg.APIBase = c.Cmt.APIUrl
+	}
+	if c.Cmt.Model != "" {
+		cfg.Model = c.Cmt.Model
+	}
+	return cfg
 }
 
 // EnsureFailFlag 给 curl 命令注入 -f(--fail),使 HTTP 4xx/5xx 判定为失败
