@@ -6,7 +6,7 @@
 
 - ⚡ **快速分支同步**：一条命令合并当前分支到目标分支并推送（`qg gmt`）
 - 🤖 **AI 生成提交信息**：根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message（`qg cmt`）
-- 🌳 **工作树管理**：创建新分支并在当前目录同级创建独立工作树，可一键用 IDEA / WorkBuddy / DeepSeek Harness 打开（`qg wt`）
+- 🌳 **工作树管理**：创建新分支并在当前目录同级创建独立工作树，可一键用 IDEA / WorkBuddy / DeepSeek Harness / Qoder 打开（`qg wt`）
 - 🧠 **知识库挂载**：知识库放在仓库外，用符号链接挂进工作树，多个工作树共享同一份项目知识（`qg kb`）
 - 🧹 **分支清理**：删除当前分支、对应工作树及 DSH 工作区，可选连远程分支一起删除（`qg rm`）
 - 🏃 **脚本运行**：用 Go 编写一次性脚本，像本地命令一样执行（`qg run`）
@@ -18,7 +18,7 @@
 
 - Git（必需）
 - Go 1.21+（仅 `qg run` 和源码编译需要）
-- 可选：IntelliJ IDEA、WorkBuddy、DeepSeek Harness Desktop（分别用于 `qg wt -i / -w / -d`；`-d` 还需要仓库中的 `dsh-plugin`）
+- 可选：IntelliJ IDEA、WorkBuddy、DeepSeek Harness Desktop、Qoder（分别用于 `qg wt -i / -w / -d / -q`；`-d` 还需要仓库中的 `dsh-plugin`，`-q` 建议安装带 CLI 的 Qoder IDE）
 
 ## 命令结构
 
@@ -28,7 +28,7 @@ qg
 ├── gmt <branch>    快速分支同步：合并当前分支到目标分支并推送（-b 触发构建）
 ├── from            查看当前分支来源信息（来源 / 切出时间）
 ├── p <备注>         提交所有修改并推送
-├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy / -d DSH Desktop）
+├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy / -d DSH Desktop / -q Qoder）
 ├── run <脚本>       执行 Go 脚本（--timeout 秒数；脚本目录 ~/.qg/scripts/）
 ├── kb              知识库挂载与状态
 │   ├── attach [路径] 挂载知识库（缺省当前目录）
@@ -115,6 +115,9 @@ qg wt feature/login -w
 
 # 创建后在 DSH Desktop 中创建工作区并打开
 qg wt feature/login -d
+
+# 创建后在 Qoder 中打开工作区
+qg wt feature/login -q
 ```
 
 #### 起点选择
@@ -152,6 +155,7 @@ qg wt feature/login -d
 | `-i, --idea` | 用 IntelliJ IDEA 打开工作树 | 本机安装 IDEA（PATH 中的 `idea`、Toolbox 脚本或 `/Applications/IntelliJ IDEA*.app`） |
 | `-w, --workbuddy` | 通过 `workbuddy://task?action=start&cwd=...` 新建 WorkBuddy 任务草稿 | 安装 WorkBuddy 并注册 URL 协议 |
 | `-d, --dsh` | 在整合版 DSH Desktop 中创建/复用该工作树的工作区并打开 | 安装仓库 `dsh-plugin/` 中的 `qg-dsh-open` 插件；DSH Desktop 已启动 |
+| `-q, --qoder` | 通过 `qoder --new-window <目录>` 在 Qoder 中打开工作树 | Qoder IDE 自带的 CLI（`/Applications/Qoder IDE.app/Contents/Resources/app/bin/qoder` 或 PATH 中的 `qoder`）；找不到 CLI 时回退系统应用打开 |
 
 说明：
 
@@ -159,8 +163,9 @@ qg wt feature/login -d
 - 工作区已存在时直接复用并打开，保留原名称；新工作区以目录名作为标题。
 - DSH 未运行时 qg 会先尝试启动 DeepSeek Harness，并等待桥接就绪（最多约 15 秒）。
 - 插件未安装、未加载或令牌失效时只打印警告，**工作树仍会保留**，不会回滚已创建的分支。
+- `-q` 优先调用 Qoder IDE 的 CLI，以 `--new-window` 打开工作树并创建工作区；CLI 不存在时回退到系统应用打开。当前 Qoder Desktop（`com.qoder.app`）不保证响应命令行传入的目录，若未自动创建工作区，按提示在 Qoder 中手动打开即可。可用 `QG_QODER_CLI` 指定 CLI 路径。
 - 工作树创建后自动挂载知识库（等价 `qg kb attach`）并生成 `AGENTS.local.md`；挂载失败只警告，工作树保留。
-- 多个旗标可以同时使用，例如 `qg wt feature/login -i -d`。
+- 多个旗标可以同时使用，例如 `qg wt feature/login -i -d -q`。
 
 #### DSH 插件（`qg-dsh-open`）
 
@@ -452,6 +457,7 @@ qg from
 |---|---|
 | `QG_SCRIPTS_DIR` | `qg run` 的脚本目录，默认 `~/.qg/scripts` |
 | `QG_DSH_BRIDGE` | `qg wt -d` 读取的 DSH 桥接文件，默认 `~/.qg/dsh-bridge.json` |
+| `QG_QODER_CLI` | `qg wt -q` 使用的 Qoder CLI 路径；缺省时查找 PATH 与常见安装目录 |
 | `AI_KB_ROOT` | 知识库根目录，默认仓库同级 `_ai-kb`，其次 `~/.ai-kb` |
 | `DSH_HOME` | DSH 配置目录，默认 `~/.dsh`；`qg kb` 把全局 `AGENTS.md` / `skills` 链接到这里 |
 
@@ -498,6 +504,7 @@ internal/runner/         qg run 的脚本解析、编译与执行
 internal/idea/           IntelliJ IDEA 检测与启动
 internal/workbuddy/      WorkBuddy 深链接
 internal/dsh/            通过 DSH Desktop 桥接创建并打开工作区
+internal/qoder/          通过 Qoder CLI / 应用打开工作树
 internal/llm/            LLM API 客户端（OpenAI 兼容 / Anthropic）
 internal/prompt/         commit message Prompt 构造
 internal/proc/           跨平台进程组管理（超时终止子进程树）
@@ -518,6 +525,10 @@ dsh-plugin/              qg-dsh-open：DSH Desktop 工作区桥接插件（Host 
 **`qg wt -w` 提示无法打开 WorkBuddy**
 
 确认 WorkBuddy 已安装并注册了 `workbuddy://` 协议。工作树仍然创建成功。
+
+**`qg wt -q` 没有自动创建 Qoder 工作区**
+
+优先安装带 CLI 的 Qoder IDE（或把 `qoder` 加入 PATH / 设置 `QG_QODER_CLI`）。仅安装 Qoder Desktop 时 qg 只能唤起应用，桌面版当前不保证响应命令行目录参数，可在 Qoder 中手动打开输出的工作树路径。
 
 **`qg wt -d` 提示未检测到 DSH 工作区桥接插件**
 

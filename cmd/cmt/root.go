@@ -54,7 +54,7 @@ func Execute() {
 	wtCmd := &cobra.Command{
 		Use:           "wt <branch>",
 		Short:         "创建分支和工作树",
-		Long:          "创建新分支并在当前目录的同级目录创建对应工作树。起点用 --from 指定（先 fetch 远端最新，如 origin/release），或配置 qg.hjson 的 wt.base；都没配则基于当前 HEAD。可用 -i 在 IntelliJ IDEA 中打开，-w 在 WorkBuddy 中打开，-d 在 DSH Desktop 中打开并创建工作区。",
+		Long:          "创建新分支并在当前目录的同级目录创建对应工作树。起点用 --from 指定（先 fetch 远端最新，如 origin/release），或配置 qg.hjson 的 wt.base；都没配则基于当前 HEAD。可用 -i 在 IntelliJ IDEA 中打开，-w 在 WorkBuddy 中打开，-d 在 DSH Desktop 中打开并创建工作区，-q 在 Qoder 中打开工作区。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Args:          cobra.ExactArgs(1),
@@ -63,6 +63,7 @@ func Execute() {
 	wtCmd.Flags().BoolVarP(&wtOpenIdea, "idea", "i", false, "创建后在 IntelliJ IDEA 中打开工作树")
 	wtCmd.Flags().BoolVarP(&wtOpenWorkBuddy, "workbuddy", "w", false, "创建后在 WorkBuddy 中打开工作树（新任务草稿）")
 	wtCmd.Flags().BoolVarP(&wtOpenDSH, "dsh", "d", false, "创建后在 DSH Desktop 中打开工作树并创建工作区")
+	wtCmd.Flags().BoolVarP(&wtOpenQoder, "qoder", "q", false, "创建后在 Qoder 中打开工作树并创建工作区")
 	wtCmd.Flags().StringVar(&wtFrom, "from", "", "新分支的起点分支（fetch 远端最新后切出，如 release）")
 	wtCmd.Flags().StringVarP(&wtNote, "note", "n", "", "本需求一句话说明，写进工作树的 AGENTS.local.md")
 

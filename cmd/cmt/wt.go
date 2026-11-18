@@ -12,6 +12,7 @@ import (
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/idea"
 	"github.com/zfslalala/cmt/internal/kb"
+	"github.com/zfslalala/cmt/internal/qoder"
 	"github.com/zfslalala/cmt/internal/workbuddy"
 )
 
@@ -19,6 +20,7 @@ var (
 	wtOpenIdea      bool
 	wtOpenWorkBuddy bool
 	wtOpenDSH       bool
+	wtOpenQoder     bool
 	wtFrom          string
 	wtNote          string
 )
@@ -82,6 +84,20 @@ func runWt(cmd *cobra.Command, args []string) error {
 			fmt.Printf("已在 DeepSeek Harness 中创建工作区并打开: %s\n", res.WorkspaceID)
 		} else {
 			fmt.Printf("已在 DeepSeek Harness 中打开工作区: %s\n", res.WorkspaceID)
+		}
+	}
+
+	if wtOpenQoder {
+		via, err := qoder.OpenWorkspace(path)
+		if err != nil {
+			// 工作树已创建成功，打开失败只警告不报错
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintf(os.Stderr, "  工作树已就绪，可手动在 Qoder 中打开: %s\n", path)
+		} else {
+			fmt.Printf("已在 %s 中打开工作树: %s\n", via, path)
+			if via == "Qoder Desktop" {
+				fmt.Println("（Qoder Desktop 若未自动创建工作区，请在该应用中手动打开上述目录）")
+			}
 		}
 	}
 	return nil
