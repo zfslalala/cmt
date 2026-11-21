@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,11 @@ import (
 	"time"
 
 	"github.com/zfslalala/cmt/pkg/config"
+)
+
+const (
+	maxResponseBodyBytes = 1 << 20
+	maxErrorDetailBytes  = 4 << 10
 )
 
 type Client struct {
@@ -56,25 +62,35 @@ type ChatResponse struct {
 func NewClient(cfg *config.Config) *Client {
 	return &Client{
 		config: cfg,
-		client: &http.Client{Timeout: 120 * time.Second},
+		client: &http.Client{
+			Timeout: 120 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				// 不跟随重定向，避免把 API Key 转发给未配置的目标地址。
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
 func (c *Client) Chat(systemPrompt, userPrompt string) (string, error) {
+	return c.ChatContext(context.Background(), systemPrompt, userPrompt)
+}
+
+func (c *Client) ChatContext(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	// 判断是否是 Anthropic API
 	if c.isAnthropicAPI() {
-		return c.chatAnthropic(systemPrompt, userPrompt)
+		return c.chatAnthropic(ctx, systemPrompt, userPrompt)
 	}
-	return c.chatOpenAI(systemPrompt, userPrompt)
+	return c.chatOpenAI(ctx, systemPrompt, userPrompt)
 }
 
 func (c *Client) isAnthropicAPI() bool {
 	return strings.Contains(c.config.APIBase, "anthropic")
 }
 
-// doRequest 发送 POST 请求,非 200 时返回含响应体的错误
-func (c *Client) doRequest(url string, headers map[string]string, body []byte) ([]byte, error) {
-	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
+// doRequest 发送 POST 请求,非 2xx 时返回含响应体摘要的错误
+func (c *Client) doRequest(ctx context.Context, url string, headers map[string]string, body []byte) ([]byte, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -89,14 +105,29 @@ func (c *Client) doRequest(url string, headers map[string]string, body []byte) (
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes+1))
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("API 请求失败(%d): %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("API 请求失败(%d): %s", resp.StatusCode, responseExcerpt(respBody))
+	}
+	if len(respBody) > maxResponseBodyBytes {
+		return nil, fmt.Errorf("API 响应超过 %d KiB，已中止读取", maxResponseBodyBytes/1024)
 	}
 	return respBody, nil
+}
+
+func responseExcerpt(body []byte) string {
+	truncated := len(body) > maxErrorDetailBytes
+	if truncated {
+		body = body[:maxErrorDetailBytes]
+	}
+	text := strings.TrimSpace(string(body))
+	if truncated {
+		text += "... (响应体已截断)"
+	}
+	return text
 }
 
 // anthropicMessagesURL 拼接 Anthropic messages 端点,兼容末尾带 / 或 /v1 的写法
@@ -112,7 +143,7 @@ func (c *Client) openaiChatURL() string {
 }
 
 // chatAnthropic 调用 Anthropic API
-func (c *Client) chatAnthropic(systemPrompt, userPrompt string) (string, error) {
+func (c *Client) chatAnthropic(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	req := AnthropicRequest{
 		Model:     c.config.Model,
 		MaxTokens: c.config.MaxTokens,
@@ -125,7 +156,7 @@ func (c *Client) chatAnthropic(systemPrompt, userPrompt string) (string, error) 
 		return "", err
 	}
 
-	respBody, err := c.doRequest(c.anthropicMessagesURL(), map[string]string{
+	respBody, err := c.doRequest(ctx, c.anthropicMessagesURL(), map[string]string{
 		"x-api-key":         c.config.APIKey,
 		"anthropic-version": "2023-06-01",
 	}, body)
@@ -141,14 +172,16 @@ func (c *Client) chatAnthropic(systemPrompt, userPrompt string) (string, error) 
 	// 遍历查找文本块(兼容含 thinking 块的响应)
 	for _, block := range anthropicResp.Content {
 		if block.Type == "text" {
-			return block.Text, nil
+			if text := strings.TrimSpace(block.Text); text != "" {
+				return text, nil
+			}
 		}
 	}
-	return "", fmt.Errorf("无返回结果")
+	return "", fmt.Errorf("API 未返回可用的文本内容")
 }
 
 // chatOpenAI 调用 OpenAI 兼容 API
-func (c *Client) chatOpenAI(systemPrompt, userPrompt string) (string, error) {
+func (c *Client) chatOpenAI(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	req := ChatRequest{
 		Model: c.config.Model,
 		Messages: []Message{
@@ -164,7 +197,7 @@ func (c *Client) chatOpenAI(systemPrompt, userPrompt string) (string, error) {
 		return "", err
 	}
 
-	respBody, err := c.doRequest(c.openaiChatURL(), map[string]string{
+	respBody, err := c.doRequest(ctx, c.openaiChatURL(), map[string]string{
 		"Authorization": "Bearer " + c.config.APIKey,
 	}, body)
 	if err != nil {
@@ -176,7 +209,11 @@ func (c *Client) chatOpenAI(systemPrompt, userPrompt string) (string, error) {
 		return "", err
 	}
 	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("无返回结果")
+		return "", fmt.Errorf("API 未返回可用结果")
 	}
-	return chatResp.Choices[0].Message.Content, nil
+	message := strings.TrimSpace(chatResp.Choices[0].Message.Content)
+	if message == "" {
+		return "", fmt.Errorf("API 返回了空的 commit message")
+	}
+	return message, nil
 }

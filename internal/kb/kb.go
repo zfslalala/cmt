@@ -35,6 +35,8 @@ const (
 	branchesDirName = "branches"
 	// projectKeyFile 是仓库本地覆盖项目键的文件，位于共享 git 目录的 info 下。
 	projectKeyFile = "kb-project"
+	// managedMarker 标记 .dsh 目录由 qg 创建，可安全重建。
+	managedMarker = ".qg-managed"
 )
 
 // excludeEntries 会被写进 git 的 info/exclude，让挂载物对 git 不可见。
@@ -175,13 +177,21 @@ func mainWorktreeIn(worktree string) (string, error) {
 // projectKey 决定项目键：优先读仓库本地的 info/kb-project，
 // 否则退化为主工作树的目录名。
 func projectKey(mainWorktree string) (string, error) {
-	if common, err := git.CommonDir(mainWorktree); err == nil {
-		data, readErr := os.ReadFile(filepath.Join(common, "info", projectKeyFile))
-		if readErr == nil {
-			if key := strings.TrimSpace(string(data)); key != "" {
-				return key, nil
+	common, err := git.CommonDir(mainWorktree)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(common, "info", projectKeyFile)
+	data, readErr := os.ReadFile(path)
+	if readErr == nil {
+		if key := strings.TrimSpace(string(data)); key != "" {
+			if !validProjectKey(key) {
+				return "", fmt.Errorf("%s 包含非法项目名 %q", path, key)
 			}
+			return key, nil
 		}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return "", fmt.Errorf("读取 %s 失败: %w", path, readErr)
 	}
 
 	key := filepath.Base(filepath.Clean(mainWorktree))
@@ -190,6 +200,13 @@ func projectKey(mainWorktree string) (string, error) {
 	}
 
 	return key, nil
+}
+
+func validProjectKey(key string) bool {
+	return key != "." &&
+		key != ".." &&
+		filepath.Base(key) == key &&
+		!strings.ContainsAny(key, `/\`)
 }
 
 // rootDir 决定知识库根目录：环境变量优先，其次仓库同级的 _ai-kb，
@@ -216,7 +233,7 @@ func rootDir(mainWorktree string) (string, error) {
 }
 
 // Attach 把知识库挂载到目录所在的工作树。
-// 已存在的真实文件不会被覆盖，只记进 Warnings。
+// 普通文件不会被覆盖；无法识别的真实 .dsh 目录会直接报错保留。
 func Attach(dir string) (Layout, error) {
 	layout, err := Resolve(dir)
 	if err != nil {
@@ -239,6 +256,9 @@ func Attach(dir string) (Layout, error) {
 
 	if !layout.IsMain {
 		if err := ensureBranch(&layout); err != nil {
+			return layout, err
+		}
+		if err := checkSynthesisTarget(layout.DshPath(), layout.Base); err != nil {
 			return layout, err
 		}
 	}
@@ -643,6 +663,12 @@ func synthesize(layout *Layout) error {
 	if err := os.RemoveAll(dsh); err != nil {
 		return fmt.Errorf("清理旧的合成视图失败: %w", err)
 	}
+	if err := os.MkdirAll(dsh, 0o755); err != nil {
+		return fmt.Errorf("创建合成视图目录失败: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dsh, managedMarker), []byte("managed by qg\n"), 0o644); err != nil {
+		return fmt.Errorf("写入合成视图标记失败: %w", err)
+	}
 
 	skills := filepath.Join(dsh, "skills")
 	if err := os.MkdirAll(skills, 0o755); err != nil {
@@ -662,6 +688,45 @@ func synthesize(layout *Layout) error {
 	}
 
 	return linkPath(layout.Base, filepath.Join(dsh, "base"), layout)
+}
+
+// checkSynthesisTarget 在覆盖 .dsh 前确认目标缺失、链接到项目基座，
+// 或是 qg 可识别的合成视图。用户自己的目录和外部链接必须保留。
+func checkSynthesisTarget(dsh, base string) error {
+	info, err := os.Lstat(dsh)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("检查 .dsh 失败: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(dsh)
+		if err != nil {
+			return fmt.Errorf("读取 .dsh 链接失败: %w", err)
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(dsh), target)
+		}
+		if filepath.Clean(target) == filepath.Clean(base) {
+			return nil
+		}
+		return fmt.Errorf("%s 链接到 %s，不是 qg 管理的项目基座，未覆盖", dsh, target)
+	}
+	if isManagedSynthesis(dsh) {
+		return nil
+	}
+	return fmt.Errorf("%s 已存在且不是 qg 创建的合成视图，未覆盖；请先备份或移走该目录后重试", dsh)
+}
+
+// isManagedSynthesis 识别新旧版本的 qg 合成视图。
+func isManagedSynthesis(dsh string) bool {
+	if isFile(filepath.Join(dsh, managedMarker)) {
+		return true
+	}
+	return isSymlink(filepath.Join(dsh, "knowledge")) &&
+		isSymlink(filepath.Join(dsh, "base")) &&
+		isDir(filepath.Join(dsh, "skills"))
 }
 
 // linkSkills 把 srcDir 下的每个技能目录链接进 dstDir，同名先移除。
@@ -766,6 +831,11 @@ func containsLine(content, target string) bool {
 func isDir(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func isSymlink(path string) bool {

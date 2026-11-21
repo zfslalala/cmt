@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -15,13 +16,31 @@ import (
 	"github.com/zfslalala/cmt/pkg/config"
 )
 
-var (
+type cmtOptions struct {
 	verbose bool
 	push    bool
 	edit    bool
-)
+}
 
-func runCMT(cmd *cobra.Command, args []string) error {
+func newCMTCommand() *cobra.Command {
+	opts := cmtOptions{}
+	cmd := &cobra.Command{
+		Use:           "cmt",
+		Short:         "生成 commit message",
+		Long:          "根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCMT(cmd, opts)
+		},
+	}
+	cmd.Flags().BoolVarP(&opts.verbose, "verbose", "v", false, "生成详细的 commit message")
+	cmd.Flags().BoolVarP(&opts.push, "push", "p", false, "提交并推送")
+	cmd.Flags().BoolVarP(&opts.edit, "edit", "e", false, "编辑后提交")
+	return cmd
+}
+
+func runCMT(cmd *cobra.Command, opts cmtOptions) error {
 	if !git.IsGitRepo() {
 		return fmt.Errorf("当前目录不是 Git 仓库")
 	}
@@ -36,7 +55,9 @@ func runCMT(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("获取变更失败: %w", err)
 	}
 
+	autoStaged := false
 	if len(changes.Files) == 0 {
+		autoStaged = true
 		fmt.Println("暂存区为空，自动暂存所有变更...")
 		if err := git.AddAll(); err != nil {
 			return fmt.Errorf("自动暂存失败: %w", err)
@@ -49,20 +70,27 @@ func runCMT(cmd *cobra.Command, args []string) error {
 		if len(changes.Files) == 0 {
 			return fmt.Errorf("暂存后仍未检测到变更")
 		}
+	}
+
+	if autoStaged {
 		fmt.Printf("已暂存 %d 个文件:\n", len(changes.Files))
-		for _, file := range changes.Files {
-			fmt.Printf("  %s %s\n", git.GetStatusSymbol(file.Status), file.NewPath)
-		}
+	} else {
+		fmt.Printf("将提交 %d 个暂存文件:\n", len(changes.Files))
+	}
+	for _, file := range changes.Files {
+		fmt.Printf("  %s %s\n", git.GetStatusSymbol(file.Status), file.NewPath)
 	}
 
 	client := llm.NewClient(cfg)
-	message, err := client.Chat(prompt.GetSystemPrompt(), prompt.BuildUserPrompt(changes, verbose))
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	defer stop()
+	message, err := client.ChatContext(ctx, prompt.GetSystemPrompt(), prompt.BuildUserPrompt(changes, opts.verbose))
 	if err != nil {
 		return fmt.Errorf("生成失败: %w", err)
 	}
 
 	fmt.Println(message)
-	if edit {
+	if opts.edit {
 		fmt.Println("\n请确认或修改 commit message（直接回车使用上述内容；输入新内容后以空行结束）:")
 		editedMessage, err := readMultiline(os.Stdin)
 		if err != nil {
@@ -73,7 +101,7 @@ func runCMT(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if edit || push {
+	if opts.edit || opts.push {
 		fmt.Println("正在提交本地仓库...")
 		if err := git.Commit(message); err != nil {
 			return fmt.Errorf("提交失败: %w", err)
@@ -81,7 +109,7 @@ func runCMT(cmd *cobra.Command, args []string) error {
 		fmt.Println("提交成功!")
 	}
 
-	if push {
+	if opts.push {
 		fmt.Println("正在推送远程仓库...")
 		if err := git.Push(); err != nil {
 			return fmt.Errorf("推送失败: %w", err)

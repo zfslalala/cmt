@@ -81,16 +81,20 @@ func Push() error {
 
 // branchHasUpstream 检查当前分支是否配置了 upstream
 func branchHasUpstream() (bool, error) {
-	return branchHasUpstreamInDir("")
+	branch, err := CurrentBranch()
+	if err != nil {
+		return false, err
+	}
+	return branchHasUpstreamInDir("", branch)
 }
 
 // branchHasUpstreamInDir 检查指定目录中当前分支是否配置了 upstream
-func branchHasUpstreamInDir(dir string) (bool, error) {
-	_, err := runGitInDir(dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+func branchHasUpstreamInDir(dir, branch string) (bool, error) {
+	output, err := runGitInDir(dir, "for-each-ref", "--format=%(upstream)", "refs/heads/"+branch)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
-	return true, nil
+	return strings.TrimSpace(output) != "", nil
 }
 
 func hasUncommittedChangesInDir(dir string) (bool, error) {
@@ -114,7 +118,7 @@ func runGitInDir(dir string, args ...string) (string, error) {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git %s 失败: %v, output: %s", strings.Join(args, " "), err, string(output))
+		return "", fmt.Errorf("git %s 失败: %w, output: %s", strings.Join(args, " "), err, string(output))
 	}
 
 	return string(output), nil

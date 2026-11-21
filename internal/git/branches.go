@@ -251,7 +251,11 @@ func pushBranchInDir(dir, remote, branch string) error {
 // pullLatest 将 dir 中当前分支与远程同步（git pull）。
 // 分支未配置 upstream（如本地新分支）时跳过，返回 nil。
 func pullLatest(dir string) error {
-	hasUpstream, err := branchHasUpstreamInDir(dir)
+	branch, err := CurrentBranchIn(dir)
+	if err != nil {
+		return err
+	}
+	hasUpstream, err := branchHasUpstreamInDir(dir, branch)
 	if err != nil {
 		return err
 	}

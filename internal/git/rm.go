@@ -61,7 +61,11 @@ func DeleteBranch(branch string, remote, force bool) (*DeletedBranch, error) {
 
 	// 删除链接工作树
 	if wtPath != "" {
-		if hasChanges, err := hasUncommittedChangesInDir(wtPath); err == nil && hasChanges && !force {
+		hasChanges, err := hasUncommittedChangesInDir(wtPath)
+		if err != nil {
+			return nil, fmt.Errorf("检查工作树 %s 状态失败: %w", wtPath, err)
+		}
+		if hasChanges && !force {
 			return nil, fmt.Errorf("工作树 %s 有未提交变更，请先处理或使用 --force 强制删除", wtPath)
 		}
 		args := []string{"worktree", "remove"}
@@ -81,8 +85,18 @@ func DeleteBranch(branch string, remote, force bool) (*DeletedBranch, error) {
 		delFlag = "-D"
 	}
 	if _, err := runGitInDir(mainWt.Path, "branch", delFlag, branch); err != nil {
+		var restoreErr error
+		if wtPath != "" {
+			_, restoreErr = runGitInDir(mainWt.Path, "worktree", "add", wtPath, branch)
+		}
 		if !force && strings.Contains(err.Error(), "not fully merged") {
+			if restoreErr != nil {
+				return nil, fmt.Errorf("分支 %s 有未合并的提交；工作树已删除但自动恢复失败: %v；请确认放弃请使用 --force。原始错误: %w", branch, restoreErr, err)
+			}
 			return nil, fmt.Errorf("分支 %s 有未合并的提交，确认放弃请使用 --force", branch)
+		}
+		if restoreErr != nil {
+			return nil, fmt.Errorf("删除分支失败: %w；工作树自动恢复也失败: %v", err, restoreErr)
 		}
 		return nil, fmt.Errorf("删除分支失败: %w", err)
 	}

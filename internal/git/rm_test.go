@@ -150,6 +150,34 @@ func TestDeleteBranchUnmerged(t *testing.T) {
 	}
 }
 
+func TestDeleteBranchUnmergedWorktreeKeepsWorktree(t *testing.T) {
+	repo := rmTestRepo(t)
+	runIn := func(dir string, args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+
+	wtPath := repo + "/../feat-late"
+	runIn(repo, "worktree", "add", "-q", "-b", "feat/late", wtPath)
+	writeFile(t, wtPath+"/late.txt", "unmerged")
+	runIn(wtPath, "add", ".")
+	runIn(wtPath, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-qm", "late")
+
+	chdir(t, repo)
+	if _, err := DeleteBranch("feat/late", false, false); err == nil {
+		t.Fatal("未合并的链接工作树分支应被拒绝")
+	}
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Fatalf("拒绝删除后工作树应保留: %v", err)
+	}
+	if !branchExists("feat/late") {
+		t.Fatal("拒绝删除后分支应保留")
+	}
+}
+
 // 主仓库检出的分支拒绝删除
 func TestDeleteBranchRefusesCheckedOut(t *testing.T) {
 	repo := rmTestRepo(t)

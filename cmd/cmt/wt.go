@@ -16,27 +16,51 @@ import (
 	"github.com/zfslalala/cmt/internal/workbuddy"
 )
 
-var (
-	wtOpenIdea      bool
-	wtOpenWorkBuddy bool
-	wtOpenDSH       bool
-	wtOpenQoder     bool
-	wtFrom          string
-	wtNote          string
-)
+type wtOptions struct {
+	openIdea      bool
+	openWorkBuddy bool
+	openDSH       bool
+	openQoder     bool
+	from          string
+	note          string
+}
+
+func newWTCommand() *cobra.Command {
+	opts := wtOptions{}
+	cmd := &cobra.Command{
+		Use:           "wt <branch>",
+		Short:         "创建分支和工作树",
+		Long:          "创建新分支并在当前工作树根目录的同级目录创建对应工作树。起点用 --from 指定（先 fetch 远端最新，如 origin/release），或配置 qg.hjson 的 wt.base；都没配则基于当前 HEAD。可用 -i 在 IntelliJ IDEA 中打开，-w 在 WorkBuddy 中打开，-d 在 DSH Desktop 中打开并创建工作区，-q 在 Qoder 中打开工作区。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runWt(args[0], opts)
+		},
+	}
+	cmd.Flags().BoolVarP(&opts.openIdea, "idea", "i", false, "创建后在 IntelliJ IDEA 中打开工作树")
+	cmd.Flags().BoolVarP(&opts.openWorkBuddy, "workbuddy", "w", false, "创建后在 WorkBuddy 中打开工作树（新任务草稿）")
+	cmd.Flags().BoolVarP(&opts.openDSH, "dsh", "d", false, "创建后在 DSH Desktop 中打开工作树并创建工作区")
+	cmd.Flags().BoolVarP(&opts.openQoder, "qoder", "q", false, "创建后在 Qoder 中打开工作树并创建工作区")
+	cmd.Flags().StringVar(&opts.from, "from", "", "新分支的起点分支（fetch 远端最新后切出，如 release）")
+	cmd.Flags().StringVarP(&opts.note, "note", "n", "", "本需求一句话说明，写进工作树的 AGENTS.local.md")
+	return cmd
+}
 
 // runWt 创建新分支与对应工作树，可用 -i / -w / -d 在对应工具中打开
-func runWt(cmd *cobra.Command, args []string) error {
-	branch := args[0]
-
+func runWt(branch string, opts wtOptions) error {
 	if !git.IsGitRepo() {
 		return fmt.Errorf("当前目录不是 Git 仓库")
 	}
 
 	// 起点：--from 优先，其次 qg.hjson 的 wt.base，都为空则基于当前 HEAD
-	start := wtFrom
+	start := opts.from
 	if start == "" {
-		start = build.WorktreeBase()
+		base, err := build.WorktreeBase()
+		if err != nil {
+			return fmt.Errorf("读取工作树默认起点失败: %w", err)
+		}
+		start = base
 	}
 
 	path, resolvedStart, err := git.CreateWorktree(branch, start)
@@ -52,9 +76,9 @@ func runWt(cmd *cobra.Command, args []string) error {
 
 	// 挂载知识库并写本工作树的说明文件。工作树已经建好，这里失败只警告，
 	// 不把整个命令判为失败；用户仍可后续手工跑 qg kb attach。
-	attachKB(path, branch, resolvedStart)
+	attachKB(path, branch, resolvedStart, opts.note)
 
-	if wtOpenIdea {
+	if opts.openIdea {
 		if err := idea.Open(path); err != nil {
 			if errors.Is(err, idea.ErrNotFound) {
 				fmt.Fprintln(os.Stderr, "未检测到 IntelliJ IDEA，已跳过打开")
@@ -66,7 +90,7 @@ func runWt(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if wtOpenWorkBuddy {
+	if opts.openWorkBuddy {
 		if err := workbuddy.OpenTask(path, ""); err != nil {
 			// 工作树已创建成功，打开失败只警告不报错
 			fmt.Fprintln(os.Stderr, err)
@@ -75,7 +99,7 @@ func runWt(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if wtOpenDSH {
+	if opts.openDSH {
 		res, err := dsh.OpenWorkspace(path)
 		if err != nil {
 			// 工作树已创建成功，打开失败只警告不报错
@@ -87,7 +111,7 @@ func runWt(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if wtOpenQoder {
+	if opts.openQoder {
 		via, err := qoder.OpenWorkspace(path)
 		if err != nil {
 			// 工作树已创建成功，打开失败只警告不报错
@@ -105,7 +129,7 @@ func runWt(cmd *cobra.Command, args []string) error {
 
 // attachKB 给新建的工作树挂载知识库，并写入本工作树专属的说明文件。
 // 任何一步失败都只警告，不阻断工作树创建流程。
-func attachKB(path, branch, start string) {
+func attachKB(path, branch, start, note string) {
 	layout, err := kb.Attach(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "⚠ 知识库挂载失败: %v\n", err)
@@ -128,7 +152,7 @@ func attachKB(path, branch, start string) {
 	written, err := kb.WriteLocalNote(layout, kb.NoteContent{
 		Branch:  branch,
 		Start:   start,
-		Note:    wtNote,
+		Note:    note,
 		Created: time.Now(),
 	})
 	if err != nil {

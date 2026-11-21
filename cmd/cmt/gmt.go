@@ -9,10 +9,28 @@ import (
 	"github.com/zfslalala/cmt/internal/git"
 )
 
-// buildFlag 由 -b flag 控制,推送成功后是否触发构建
-var buildFlag bool
+type gmtOptions struct {
+	build bool
+}
 
-func runGMT(cmd *cobra.Command, args []string) error {
+func newGMTCommand() *cobra.Command {
+	opts := gmtOptions{}
+	cmd := &cobra.Command{
+		Use:           "gmt <target-branch>",
+		Short:         "将当前分支同步到目标分支",
+		Long:          "将目标分支同步到远程最新，再把当前分支合并进去，推送目标分支后回到当前分支。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runGMT(args, opts)
+		},
+	}
+	cmd.Flags().BoolVarP(&opts.build, "build", "b", false, "推送成功后触发构建（读取仓库根 qg.hjson）")
+	return cmd
+}
+
+func runGMT(args []string, opts gmtOptions) error {
 	if !git.IsGitRepo() {
 		return fmt.Errorf("当前目录不是 Git 仓库")
 	}
@@ -30,7 +48,7 @@ func runGMT(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("同步完成，当前分支仍为 %s\n", currentBranch)
 
-	if buildFlag {
+	if opts.build {
 		triggerBuilds(targetBranch)
 	}
 	return nil
@@ -58,7 +76,7 @@ func triggerBuilds(branch string) {
 	for i, rawCmd := range entry.Curl {
 		cmdStr := build.EnsureFailFlag(rawCmd)
 		if err := build.RunCommand(cmdStr); err != nil {
-			fmt.Fprintf(os.Stderr, "✗ [%d/%d] 执行失败: %v\n    命令: %s\n", i+1, total, err, cmdStr)
+			fmt.Fprintf(os.Stderr, "✗ [%d/%d] 执行失败: %v（请按序号检查 qg.hjson 中的对应命令）\n", i+1, total, err)
 			continue
 		}
 		success++

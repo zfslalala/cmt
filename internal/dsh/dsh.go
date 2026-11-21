@@ -165,7 +165,7 @@ func callOpen(info *bridgeInfo, dir string) (*Result, error) {
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := bridgeHTTPClient(30 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("连接 DSH 桥接失败: %w", err)
@@ -234,7 +234,7 @@ func callRemove(info *bridgeInfo, dir string) (RemoveResult, error) {
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := bridgeHTTPClient(15 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return RemoveResult{}, fmt.Errorf("连接 DSH 桥接失败: %w", err)
@@ -279,4 +279,14 @@ func launchDSH() error {
 		return fmt.Errorf("无法启动 DeepSeek Harness: %w", err)
 	}
 	return nil
+}
+
+func bridgeHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			// 本地桥接不应重定向；禁止跟随，避免把令牌带到其他地址。
+			return http.ErrUseLastResponse
+		},
+	}
 }

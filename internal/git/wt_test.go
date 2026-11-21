@@ -1,7 +1,9 @@
 package git
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -76,5 +78,28 @@ func TestCreateWorktreeDoesNotTrackStartPoint(t *testing.T) {
 	mergeRef := strings.TrimSpace(runIn(path, "config", "--get", "branch.feat/from-release.merge"))
 	if mergeRef != "refs/heads/feat/from-release" {
 		t.Fatalf("upstream merge = %q, want refs/heads/feat/from-release", mergeRef)
+	}
+}
+
+func TestCreateWorktreeFromSubdirectoryUsesRepoParent(t *testing.T) {
+	repo := rmTestRepo(t)
+	subdir := filepath.Join(repo, "src", "nested")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("创建子目录: %v", err)
+	}
+	chdir(t, subdir)
+
+	path, _, err := CreateWorktree("feat/from-subdir", "")
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	want, err := filepath.EvalSymlinks(filepath.Dir(repo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = filepath.Join(want, "feat-from-subdir")
+	if path != want {
+		t.Fatalf("工作树路径 = %q，期望仓库同级 %q", path, want)
 	}
 }

@@ -128,6 +128,9 @@ func TestAttachFeatureWorktreeSynthesizes(t *testing.T) {
 	if info.Mode()&os.ModeSymlink != 0 {
 		t.Fatalf("特性分支的 .dsh 应为真实目录")
 	}
+	if _, err := os.Stat(filepath.Join(worktree, DshDir, managedMarker)); err != nil {
+		t.Fatalf("缺少合成视图标记: %v", err)
+	}
 
 	assertLinkTarget(t,
 		filepath.Join(worktree, DshDir, "skills", "arch"),
@@ -141,6 +144,69 @@ func TestAttachFeatureWorktreeSynthesizes(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(branch, "knowledge", "journal.md")); err != nil {
 		t.Fatalf("缺少分支日志模板: %v", err)
+	}
+}
+
+func TestAttachFeatureWorktreePreservesForeignDsh(t *testing.T) {
+	parent, repo := setup(t)
+	setupKB(t, parent, "demo")
+
+	worktree := filepath.Join(parent, "feat-x")
+	runGit(t, repo, "worktree", "add", "-q", "-b", "feat/x", worktree)
+
+	userFile := filepath.Join(worktree, DshDir, "user.txt")
+	if err := os.MkdirAll(filepath.Dir(userFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userFile, []byte("keep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Attach(worktree); err == nil || !strings.Contains(err.Error(), "未覆盖") {
+		t.Fatalf("应拒绝覆盖用户 .dsh，实际: %v", err)
+	}
+	data, err := os.ReadFile(userFile)
+	if err != nil {
+		t.Fatalf("用户文件被删除: %v", err)
+	}
+	if string(data) != "keep me" {
+		t.Fatalf("用户文件被修改: %q", data)
+	}
+}
+
+func TestAttachFeatureWorktreePreservesForeignDshLink(t *testing.T) {
+	parent, repo := setup(t)
+	setupKB(t, parent, "demo")
+
+	worktree := filepath.Join(parent, "feat-x")
+	runGit(t, repo, "worktree", "add", "-q", "-b", "feat/x", worktree)
+
+	foreign := filepath.Join(parent, "foreign-dsh")
+	if err := os.MkdirAll(foreign, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(foreign, filepath.Join(worktree, DshDir)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Attach(worktree); err == nil || !strings.Contains(err.Error(), "不是 qg 管理") {
+		t.Fatalf("应拒绝覆盖外部 .dsh 链接，实际: %v", err)
+	}
+	assertLinkTarget(t, filepath.Join(worktree, DshDir), foreign)
+}
+
+func TestProjectKeyRejectsPathTraversal(t *testing.T) {
+	_, repo := setup(t)
+	keyFile := filepath.Join(repo, ".git", "info", projectKeyFile)
+	if err := os.MkdirAll(filepath.Dir(keyFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte("../escape"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := projectKey(repo); err == nil {
+		t.Fatal("包含路径分隔符的项目键应被拒绝")
 	}
 }
 

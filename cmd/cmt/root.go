@@ -1,6 +1,7 @@
 package cmt
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,23 @@ import (
 
 // Execute 构建命令树并执行
 func Execute() {
+	rootCmd := newRootCommand()
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		var conflictErr *git.MergeConflictError
+		if errors.As(err, &conflictErr) {
+			printMergeConflictInstructions(conflictErr)
+			os.Exit(1)
+		}
+		var exitErr *exitCodeError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.code)
+		}
+		returnCommandError(err)
+	}
+}
+
+func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:           "qg",
 		Short:         "Quick Git:快速 Git 操作工具",
@@ -18,29 +36,6 @@ func Execute() {
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
-
-	cmtCmd := &cobra.Command{
-		Use:           "cmt",
-		Short:         "生成 commit message",
-		Long:          "根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message。",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		RunE:          runCMT,
-	}
-	cmtCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "生成详细的 commit message")
-	cmtCmd.Flags().BoolVarP(&push, "push", "p", false, "提交并推送")
-	cmtCmd.Flags().BoolVarP(&edit, "edit", "e", false, "编辑后提交")
-
-	gmtCmd := &cobra.Command{
-		Use:           "gmt <target-branch>",
-		Short:         "将当前分支同步到目标分支",
-		Long:          "将目标分支同步到远程最新，再把当前分支合并进去，推送目标分支后回到当前分支。",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		Args:          cobra.ExactArgs(1),
-		RunE:          runGMT,
-	}
-	gmtCmd.Flags().BoolVarP(&buildFlag, "build", "b", false, "推送成功后触发构建（读取仓库根 qg.hjson）")
 
 	fromCmd := &cobra.Command{
 		Use:           "from",
@@ -51,26 +46,10 @@ func Execute() {
 		RunE:          runFrom,
 	}
 
-	wtCmd := &cobra.Command{
-		Use:           "wt <branch>",
-		Short:         "创建分支和工作树",
-		Long:          "创建新分支并在当前目录的同级目录创建对应工作树。起点用 --from 指定（先 fetch 远端最新，如 origin/release），或配置 qg.hjson 的 wt.base；都没配则基于当前 HEAD。可用 -i 在 IntelliJ IDEA 中打开，-w 在 WorkBuddy 中打开，-d 在 DSH Desktop 中打开并创建工作区，-q 在 Qoder 中打开工作区。",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		Args:          cobra.ExactArgs(1),
-		RunE:          runWt,
-	}
-	wtCmd.Flags().BoolVarP(&wtOpenIdea, "idea", "i", false, "创建后在 IntelliJ IDEA 中打开工作树")
-	wtCmd.Flags().BoolVarP(&wtOpenWorkBuddy, "workbuddy", "w", false, "创建后在 WorkBuddy 中打开工作树（新任务草稿）")
-	wtCmd.Flags().BoolVarP(&wtOpenDSH, "dsh", "d", false, "创建后在 DSH Desktop 中打开工作树并创建工作区")
-	wtCmd.Flags().BoolVarP(&wtOpenQoder, "qoder", "q", false, "创建后在 Qoder 中打开工作树并创建工作区")
-	wtCmd.Flags().StringVar(&wtFrom, "from", "", "新分支的起点分支（fetch 远端最新后切出，如 release）")
-	wtCmd.Flags().StringVarP(&wtNote, "note", "n", "", "本需求一句话说明，写进工作树的 AGENTS.local.md")
-
 	runCmd := &cobra.Command{
 		Use:                "run <脚本> [参数...]",
 		Short:              "执行脚本并输出到控制台",
-		Long:               "执行 Go 脚本（go run），stdout/stderr 实时打印到控制台，退出码透传。脚本可直接给路径，或放 ~/.qg/scripts/（QG_SCRIPTS_DIR 可覆盖）后用名字调用。",
+		Long:               "编译并执行 Go 脚本，stdout/stderr 实时打印到控制台，退出码透传。脚本可直接给路径，或放 ~/.qg/scripts/（QG_SCRIPTS_DIR 可覆盖）后用名字调用。",
 		SilenceErrors:      true,
 		SilenceUsage:       true,
 		DisableFlagParsing: true,
@@ -87,18 +66,6 @@ func Execute() {
 		Args:          cobra.MinimumNArgs(1),
 		RunE:          runP,
 	}
-
-	rmCmd := &cobra.Command{
-		Use:           "rm",
-		Short:         "删除当前分支、工作树及 DSH 工作区",
-		Long:          "删除当前所在分支，若分支检出于工作树则一并删除工作树及对应 DSH 工作区，主仓库自动切回默认分支。-o 同时删除远程同名分支，--force 强制跳过脏工作树与未合并检查。",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		Args:          cobra.NoArgs,
-		RunE:          runRm,
-	}
-	rmCmd.Flags().BoolVarP(&rmRemote, "origin", "o", false, "同时删除远程 origin 上的同名分支")
-	rmCmd.Flags().BoolVar(&rmForce, "force", false, "强制删除：脏工作树、未合并分支也删")
 
 	kbCmd := &cobra.Command{
 		Use:           "kb",
@@ -130,16 +97,8 @@ func Execute() {
 
 	kbCmd.AddCommand(kbAttachCmd, kbStatusCmd)
 
-	rootCmd.AddCommand(cmtCmd, gmtCmd, fromCmd, pCmd, wtCmd, runCmd, rmCmd, kbCmd)
-
-	if err := rootCmd.Execute(); err != nil {
-		var conflictErr *git.MergeConflictError
-		if errors.As(err, &conflictErr) {
-			printMergeConflictInstructions(conflictErr)
-			os.Exit(1)
-		}
-		returnCommandError(err)
-	}
+	rootCmd.AddCommand(newCMTCommand(), newGMTCommand(), fromCmd, pCmd, newWTCommand(), runCmd, newRMCommand(), kbCmd)
+	return rootCmd
 }
 
 func returnCommandError(err error) {
@@ -147,4 +106,12 @@ func returnCommandError(err error) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+type exitCodeError struct {
+	code int
+}
+
+func (e *exitCodeError) Error() string {
+	return fmt.Sprintf("exit status %d", e.code)
 }

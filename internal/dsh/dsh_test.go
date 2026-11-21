@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -129,6 +130,34 @@ func TestCallOpenRejectsBadRequest(t *testing.T) {
 	var rejected *rejectedError
 	if !errors.As(err, &rejected) {
 		t.Fatalf("callOpen() error = %v, want rejectedError", err)
+	}
+}
+
+func TestCallOpenDoesNotFollowRedirects(t *testing.T) {
+	var leaked atomic.Bool
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked.Store(true)
+		_, _ = w.Write([]byte(`{"ok":true,"workspaceId":"redirected"}`))
+	}))
+	defer target.Close()
+
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer redirector.Close()
+
+	u, err := url.Parse(redirector.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = callOpen(&bridgeInfo{Version: bridgeVersion, Port: port, Token: "secret"}, t.TempDir())
+	if leaked.Load() {
+		t.Fatal("不应跟随本地桥接重定向")
 	}
 }
 

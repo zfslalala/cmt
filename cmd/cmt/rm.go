@@ -12,13 +12,31 @@ import (
 	"github.com/zfslalala/cmt/internal/kb"
 )
 
-var (
-	rmRemote bool
-	rmForce  bool
-)
+type rmOptions struct {
+	remote bool
+	force  bool
+}
+
+func newRMCommand() *cobra.Command {
+	opts := rmOptions{}
+	cmd := &cobra.Command{
+		Use:           "rm",
+		Short:         "删除当前分支、工作树及 DSH 工作区",
+		Long:          "删除当前所在分支，若分支检出于工作树则一并删除工作树及对应 DSH 工作区，主仓库自动切回默认分支。-o 同时删除远程同名分支，--force 强制跳过脏工作树与未合并检查。",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Args:          cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRm(opts)
+		},
+	}
+	cmd.Flags().BoolVarP(&opts.remote, "origin", "o", false, "同时删除远程 origin 上的同名分支")
+	cmd.Flags().BoolVar(&opts.force, "force", false, "强制删除：脏工作树、未合并分支也删")
+	return cmd
+}
 
 // runRm 删除当前所在分支，检出于工作树则一并删除
-func runRm(cmd *cobra.Command, args []string) error {
+func runRm(opts rmOptions) error {
 	if !git.IsGitRepo() {
 		return fmt.Errorf("当前目录不是 Git 仓库")
 	}
@@ -29,7 +47,7 @@ func runRm(cmd *cobra.Command, args []string) error {
 	}
 
 	// 远程删除不可逆，显式确认
-	if rmRemote {
+	if opts.remote {
 		fmt.Printf("即将删除本地及远程分支: %s 和 origin/%s\n", branch, branch)
 		fmt.Print("确认删除远程分支? (y/N): ")
 		answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -45,7 +63,7 @@ func runRm(cmd *cobra.Command, args []string) error {
 		kbLayout, hasKB = layout, true
 	}
 
-	res, err := git.DeleteBranch(branch, rmRemote, rmForce)
+	res, err := git.DeleteBranch(branch, opts.remote, opts.force)
 	if err != nil {
 		return err
 	}

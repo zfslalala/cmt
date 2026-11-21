@@ -3,6 +3,7 @@ package git
 import (
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +67,47 @@ func TestGetStagedFiles(t *testing.T) {
 	}
 	if m, ok := byStatus["M"]; !ok || m.NewPath != "b.txt" {
 		t.Errorf("修改文件解析错误: %+v", byStatus)
+	}
+}
+
+func TestGetStagedDiffTruncatesLargeChanges(t *testing.T) {
+	dir := t.TempDir()
+	run := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+
+	run("init", "-q")
+	var content strings.Builder
+	for i := 0; i < 700; i++ {
+		content.WriteString(strings.Repeat("x", 200))
+		content.WriteByte('\n')
+	}
+	if err := os.WriteFile(dir+"/large.txt", []byte(content.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "large.txt")
+
+	prevWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(prevWd) }()
+
+	diff, err := getStagedDiff()
+	if err != nil {
+		t.Fatalf("getStagedDiff: %v", err)
+	}
+	if !strings.Contains(diff, "已截断") {
+		t.Fatalf("大 diff 应带有截断提示，实际长度 %d", len(diff))
+	}
+	if len(diff) > maxStagedDiffBytes+200 {
+		t.Fatalf("diff 未受字节上限约束，长度 %d", len(diff))
 	}
 }

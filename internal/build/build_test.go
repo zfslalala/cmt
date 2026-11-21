@@ -234,3 +234,17 @@ func TestLLMConfigOnNilConfig(t *testing.T) {
 		t.Fatalf("期望返回默认值，实际 %+v", got)
 	}
 }
+
+func TestWorktreeBaseReportsInvalidConfig(t *testing.T) {
+	parent := t.TempDir()
+	t.Setenv("AI_KB_ROOT", "")
+	repo := initRepo(t, parent, "demo")
+	if err := os.WriteFile(filepath.Join(repo, "qg.hjson"), []byte("{ invalid"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chdir(t, repo)
+
+	if _, err := WorktreeBase(); err == nil {
+		t.Fatal("损坏的 qg.hjson 应返回错误，避免静默退回 HEAD")
+	}
+}

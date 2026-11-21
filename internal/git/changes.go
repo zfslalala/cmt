@@ -2,9 +2,16 @@ package git
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+)
+
+const (
+	maxStagedDiffBytes = 64 << 10
+	maxStagedDiffLines = 500
 )
 
 type FileChange struct {
@@ -40,7 +47,7 @@ func runGitOutput(args ...string) (string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git %s 失败: %v, stderr: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("git %s 失败: %w, stderr: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
 }
@@ -88,17 +95,51 @@ func getStagedFiles() ([]FileChange, error) {
 }
 
 func getStagedDiff() (string, error) {
-	output, err := runGitOutput("diff", "--cached")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "git", "diff", "--cached")
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("读取暂存区 diff 失败: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("启动 git diff 失败: %w", err)
 	}
 
-	lines := strings.Split(output, "\n")
-	if len(lines) > 500 {
-		lines = append(lines[:500], "... (diff 内容过长，已截断)")
+	data, readErr := io.ReadAll(io.LimitReader(stdout, maxStagedDiffBytes+1))
+	byteTruncated := len(data) > maxStagedDiffBytes
+	if byteTruncated {
+		data = data[:maxStagedDiffBytes]
+		cancel()
 	}
 
-	return strings.Join(lines, "\n"), nil
+	waitErr := cmd.Wait()
+	if readErr != nil {
+		return "", fmt.Errorf("读取 git diff 失败: %w", readErr)
+	}
+	if waitErr != nil && !byteTruncated {
+		return "", fmt.Errorf("git diff --cached 失败: %v, stderr: %s", waitErr, strings.TrimSpace(stderr.String()))
+	}
+
+	text := strings.TrimRight(string(data), "\n")
+	lines := strings.Split(text, "\n")
+	lineTruncated := len(lines) > maxStagedDiffLines
+	if lineTruncated {
+		lines = lines[:maxStagedDiffLines]
+		text = strings.Join(lines, "\n")
+	}
+
+	switch {
+	case byteTruncated:
+		text += "\n... (diff 超过 64 KiB，已截断；可用 git diff --cached 查看完整内容)"
+	case lineTruncated:
+		text += "\n... (diff 超过 500 行，已截断；可用 git diff --cached 查看完整内容)"
+	}
+
+	return text, nil
 }
 
 // GetStatusSymbol 获取状态符号

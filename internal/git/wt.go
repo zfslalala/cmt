@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// CreateWorktree 创建新分支，并在当前执行目录的兄弟目录创建对应工作树。
+// CreateWorktree 创建新分支，并在当前工作树根目录的兄弟目录创建对应工作树。
 // 目录名取分支名（/ 与空格转成 -）。返回工作树绝对路径与实际使用的起点引用。
 // startPoint 为空时基于当前 HEAD；否则优先线上最新（fetch 后取 origin/<name>），
 // 远端不存在同名分支时回退本地分支。
@@ -29,19 +29,19 @@ func CreateWorktree(branch, startPoint string) (string, string, error) {
 		return "", "", fmt.Errorf("分支 %s 已在工作树中检出: %s", branch, path)
 	}
 
-	cwd, err := os.Getwd()
+	root, err := RepoRoot()
 	if err != nil {
-		return "", "", fmt.Errorf("获取当前目录失败: %w", err)
+		return "", "", fmt.Errorf("定位仓库根目录失败: %w", err)
 	}
 
 	dirName := SanitizeBranchName(branch)
 	if dirName == "" {
 		return "", "", fmt.Errorf("分支名 %s 无法转换为目录名", branch)
 	}
-	target := filepath.Join(filepath.Dir(cwd), dirName)
+	target := filepath.Join(filepath.Dir(root), dirName)
 
 	// 目标目录不允许是当前仓库根目录（例如当前目录叫 test、分支也叫 test 的情况）
-	if root, err := RepoRoot(); err == nil && filepath.Clean(root) == filepath.Clean(target) {
+	if filepath.Clean(root) == filepath.Clean(target) {
 		return "", "", fmt.Errorf("目标目录 %s 与当前仓库根目录相同，请更换分支名", target)
 	}
 	if _, err := os.Stat(target); err == nil {

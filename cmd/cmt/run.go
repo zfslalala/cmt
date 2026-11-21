@@ -2,7 +2,6 @@ package cmt
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -68,7 +67,7 @@ loop:
 		return err
 	}
 	if code != 0 {
-		os.Exit(code)
+		return &exitCodeError{code: code}
 	}
 	return nil
 }

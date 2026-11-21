@@ -109,17 +109,16 @@ func isFile(path string) bool {
 }
 
 // WorktreeBase 读取 qg.hjson 中 wt.base 配置（新分支默认起点）。
-// 文件不存在或未配置时返回空串；配置文件损坏时仅告警不阻断。
-func WorktreeBase() string {
+// 文件不存在或未配置时返回空串；配置文件损坏时返回错误，避免静默退回 HEAD。
+func WorktreeBase() (string, error) {
 	cfg, err := Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "⚠ 读取 qg.hjson 失败: %v\n", err)
-		return ""
+		return "", err
 	}
 	if cfg == nil {
-		return ""
+		return "", nil
 	}
-	return strings.TrimSpace(cfg.Wt.Base)
+	return strings.TrimSpace(cfg.Wt.Base), nil
 }
 
 // EntryFor 返回指定分支的构建配置;未配置时 ok 为 false
@@ -190,6 +189,6 @@ func RunCommand(cmdStr string) error {
 	case <-ctx.Done():
 		proc.KillProcessGroup(cmd)
 		<-waitErr
-		return fmt.Errorf("命令超时(%s): %s", commandTimeout, cmdStr)
+		return fmt.Errorf("命令超时(%s)", commandTimeout)
 	}
 }
