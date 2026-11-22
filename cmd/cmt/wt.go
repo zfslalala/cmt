@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zfslalala/cmt/internal/build"
+	"github.com/zfslalala/cmt/internal/codex"
 	"github.com/zfslalala/cmt/internal/dsh"
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/idea"
@@ -21,6 +22,7 @@ type wtOptions struct {
 	openWorkBuddy bool
 	openDSH       bool
 	openQoder     bool
+	openCodex     bool
 	from          string
 	note          string
 }
@@ -30,7 +32,7 @@ func newWTCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "wt <branch>",
 		Short:         "创建分支和工作树",
-		Long:          "创建新分支并在当前工作树根目录的同级目录创建对应工作树。起点用 --from 指定（先 fetch 远端最新，如 origin/release），或配置 qg.hjson 的 wt.base；都没配则基于当前 HEAD。可用 -i 在 IntelliJ IDEA 中打开，-w 在 WorkBuddy 中打开，-d 在 DSH Desktop 中打开并创建工作区，-q 在 Qoder 中打开工作区。",
+		Long:          "创建新分支并在当前工作树根目录的同级目录创建对应工作树。起点用 --from 指定 origin 上已存在的分支（如 release 或 origin/release），远程不存在时报错；也可配置 qg.hjson 的 wt.base，都没配则基于当前 HEAD。可用 -i 在 IntelliJ IDEA 中打开，-w 在 WorkBuddy 中打开，-d 在 DSH Desktop 中打开并创建工作区，-q 在 Qoder 中打开工作区，-c 在 Codex Desktop 中打开工作区。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Args:          cobra.ExactArgs(1),
@@ -42,7 +44,8 @@ func newWTCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&opts.openWorkBuddy, "workbuddy", "w", false, "创建后在 WorkBuddy 中打开工作树（新任务草稿）")
 	cmd.Flags().BoolVarP(&opts.openDSH, "dsh", "d", false, "创建后在 DSH Desktop 中打开工作树并创建工作区")
 	cmd.Flags().BoolVarP(&opts.openQoder, "qoder", "q", false, "创建后在 Qoder 中打开工作树并创建工作区")
-	cmd.Flags().StringVar(&opts.from, "from", "", "新分支的起点分支（fetch 远端最新后切出，如 release）")
+	cmd.Flags().BoolVarP(&opts.openCodex, "codex", "c", false, "创建后在 Codex Desktop 中打开工作树")
+	cmd.Flags().StringVar(&opts.from, "from", "", "origin 上已存在的起点分支（如 release 或 origin/release；不存在时报错）")
 	cmd.Flags().StringVarP(&opts.note, "note", "n", "", "本需求一句话说明，写进工作树的 AGENTS.local.md")
 	return cmd
 }
@@ -124,6 +127,16 @@ func runWt(branch string, opts wtOptions) error {
 			}
 		}
 	}
+
+	if opts.openCodex {
+		via, err := codex.OpenWorkspace(path)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintf(os.Stderr, "  工作树已就绪，可手工执行: codex app %s\n", path)
+		} else {
+			fmt.Printf("已在 %s 中打开工作树: %s\n", via, path)
+		}
+	}
 	return nil
 }
 
@@ -145,6 +158,7 @@ func attachKB(path, branch, start, note string) {
 		fmt.Println("（请补充 AGENTS.md 与 .dsh/skills 下的技能，否则 AI 只知道这是个空项目）")
 	}
 	fmt.Printf("已挂载知识库: %s（项目 %s）\n", layout.Root, layout.Project)
+	fmt.Println("已接入: Codex (.agents) / DSH (.dsh) / Qoder (.qoder)")
 	if layout.Branch != "" {
 		fmt.Printf("分支知识目录: %s\n", layout.Branch)
 	}
@@ -161,6 +175,9 @@ func attachKB(path, branch, start, note string) {
 	}
 	if written {
 		fmt.Printf("已生成 %s（写清本需求目标后 AI 才分得清你在做什么）\n", kb.LocalNoteFile)
+		if err := kb.SyncWorktreeInstructions(&layout); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠ 同步工作树 AGENTS.md 失败: %v\n", err)
+		}
 	}
 
 	for _, warning := range layout.Warnings {

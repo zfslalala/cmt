@@ -1,16 +1,18 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
 // CreateWorktree 创建新分支，并在当前工作树根目录的兄弟目录创建对应工作树。
 // 目录名取分支名（/ 与空格转成 -）。返回工作树绝对路径与实际使用的起点引用。
-// startPoint 为空时基于当前 HEAD；否则优先线上最新（fetch 后取 origin/<name>），
-// 远端不存在同名分支时回退本地分支。
+// startPoint 为空时基于当前 HEAD；否则必须使用 origin 上存在的同名分支。
+// 远程分支不存在、网络失败或鉴权失败都会返回错误，不回退本地分支。
 func CreateWorktree(branch, startPoint string) (string, string, error) {
 	branch = strings.TrimSpace(branch)
 	if branch == "" {
@@ -72,20 +74,42 @@ func CreateWorktree(branch, startPoint string) (string, string, error) {
 	return target, resolvedStart, nil
 }
 
-// resolveStartPoint 解析新分支的起点：
-//  1. fetch 远端最新，用 origin/<name>（保证基于线上代码而非可能落后的本地分支）
-//  2. 远端不存在同名分支时，回退本地分支
+// resolveStartPoint 解析新分支的远程起点。
+// 只接受 origin 上真实存在的分支；结束后返回更新过的 origin/<name>。
 func resolveStartPoint(name string) (string, error) {
 	// 允许直接写 origin/release 的形式
-	ref := strings.TrimPrefix(name, "origin/")
+	ref := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(name), "origin/"))
+	if ref == "" {
+		return "", fmt.Errorf("起点分支不能为空")
+	}
 
-	if _, err := runGit("fetch", "origin", ref); err == nil {
-		return "origin/" + ref, nil
+	exists, err := remoteBranchExists(ref)
+	if err != nil {
+		return "", err
 	}
-	if branchExists(ref) {
-		return ref, nil
+	if !exists {
+		return "", fmt.Errorf("远程分支 origin/%s 不存在；--from 只支持已推送到 origin 的分支", ref)
 	}
-	return "", fmt.Errorf("起点 %s 在远程和本地都不存在", name)
+
+	if _, err := runGit("fetch", "origin", ref); err != nil {
+		return "", fmt.Errorf("拉取远程分支 origin/%s 失败: %w", ref, err)
+	}
+	return "origin/" + ref, nil
+}
+
+// remoteBranchExists 通过 ls-remote 确认 origin 上是否存在指定分支。
+// git ls-remote --exit-code 在无匹配 ref 时返回 2；其他非零退出码视为网络、
+// 鉴权或仓库配置错误，不能降级为“分支不存在”。
+func remoteBranchExists(ref string) (bool, error) {
+	_, err := runGit("ls-remote", "--exit-code", "--heads", "origin", "refs/heads/"+ref)
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 2 {
+		return false, nil
+	}
+	return false, fmt.Errorf("检查远程分支 origin/%s 失败: %w", ref, err)
 }
 
 // SanitizeBranchName 将分支名转换为安全的目录名。

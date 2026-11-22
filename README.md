@@ -6,7 +6,7 @@
 
 - ⚡ **快速分支同步**：一条命令合并当前分支到目标分支并推送（`qg gmt`）
 - 🤖 **AI 生成提交信息**：根据暂存区变更自动生成符合 Conventional Commits 规范的 commit message（`qg cmt`）
-- 🌳 **工作树管理**：创建新分支并在当前目录同级创建独立工作树，可一键用 IDEA / WorkBuddy / DeepSeek Harness / Qoder 打开（`qg wt`）
+- 🌳 **工作树管理**：创建新分支并在工作树根目录同级创建独立工作树，可一键用 IDEA / WorkBuddy / DeepSeek Harness / Qoder / Codex Desktop 打开（`qg wt`）
 - 🧠 **知识库挂载**：知识库放在仓库外，用符号链接挂进工作树，多个工作树共享同一份项目知识（`qg kb`）
 - 🧹 **分支清理**：删除当前分支、对应工作树及 DSH 工作区，可选连远程分支一起删除（`qg rm`）
 - 🏃 **脚本运行**：用 Go 编写一次性脚本，像本地命令一样执行（`qg run`）
@@ -18,7 +18,7 @@
 
 - Git（必需）
 - Go 1.21+（仅 `qg run` 和源码编译需要）
-- 可选：IntelliJ IDEA、WorkBuddy、DeepSeek Harness Desktop、Qoder（分别用于 `qg wt -i / -w / -d / -q`；`-d` 还需要仓库中的 `dsh-plugin`，`-q` 建议安装带 CLI 的 Qoder IDE）
+- 可选：IntelliJ IDEA、WorkBuddy、DeepSeek Harness Desktop、Qoder、Codex Desktop（分别用于 `qg wt -i / -w / -d / -q / -c`；`-d` 还需要仓库中的 `dsh-plugin`，`-q` 建议安装带 CLI 的 Qoder IDE，`-c` 需要可执行的 `codex`）
 
 ## 命令结构
 
@@ -28,7 +28,7 @@ qg
 ├── gmt <branch>    快速分支同步：合并当前分支到目标分支并推送（-b 触发构建）
 ├── from            查看当前分支来源信息（来源 / 切出时间）
 ├── p <备注>         提交所有修改并推送
-├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy / -d DSH Desktop / -q Qoder）
+├── wt <branch>     创建分支和工作树（--from 指定起点 / -i IDEA / -w WorkBuddy / -d DSH Desktop / -q Qoder / -c Codex）
 ├── run <脚本>       执行 Go 脚本（--timeout 秒数；脚本目录 ~/.qg/scripts/）
 ├── kb              知识库挂载与状态
 │   ├── attach [路径] 挂载知识库（缺省当前目录）
@@ -118,13 +118,16 @@ qg wt feature/login -d
 
 # 创建后在 Qoder 中打开工作区
 qg wt feature/login -q
+
+# 创建后在 Codex Desktop 中打开工作区
+qg wt feature/login -c
 ```
 
 #### 起点选择
 
 优先级从高到低：
 
-1. `--from <分支>`：先 `git fetch origin <分支>` 取线上最新，再以 `origin/<分支>` 为起点；远端没有时回退本地同名分支；远端和本地都没有则报错。
+1. `--from <分支>`：确认 `origin` 上存在该分支并 `git fetch origin <分支>`，再以最新的 `origin/<分支>` 为起点。远程分支不存在、断网或鉴权失败都会直接报错，**不会回退本地同名分支**。
 2. `qg.hjson` 中的 `wt.base`：适合把团队的集成分支（如 `release`）设为默认起点。
 3. 当前 `HEAD`。
 
@@ -155,6 +158,7 @@ qg wt feature/login -q
 | `-w, --workbuddy` | 通过 `workbuddy://task?action=start&cwd=...` 新建 WorkBuddy 任务草稿 | 安装 WorkBuddy 并注册 URL 协议 |
 | `-d, --dsh` | 在整合版 DSH Desktop 中创建/复用该工作树的工作区并打开 | 安装仓库 `dsh-plugin/` 中的 `qg-dsh-open` 插件；DSH Desktop 已启动 |
 | `-q, --qoder` | 通过 `qoder --new-window <目录>` 在 Qoder 中打开工作树 | Qoder IDE 自带的 CLI（`/Applications/Qoder IDE.app/Contents/Resources/app/bin/qoder` 或 PATH 中的 `qoder`）；找不到 CLI 时回退系统应用打开 |
+| `-c, --codex` | 通过 `codex app <目录>` 在 Codex Desktop 中打开工作区 | Codex Desktop 安装后自带的 `codex` CLI（PATH 或 ChatGPT/Codex 应用包内）；可用 `QG_CODEX_CLI` 指定路径 |
 
 说明：
 
@@ -163,8 +167,9 @@ qg wt feature/login -q
 - DSH 未运行时 qg 会先尝试启动 DeepSeek Harness，并等待桥接就绪（最多约 15 秒）。
 - 插件未安装、未加载或令牌失效时只打印警告，**工作树仍会保留**，不会回滚已创建的分支。
 - `-q` 优先调用 Qoder IDE 的 CLI，以 `--new-window` 打开工作树并创建工作区；CLI 不存在时回退到系统应用打开。当前 Qoder Desktop（`com.qoder.app`）不保证响应命令行传入的目录，若未自动创建工作区，按提示在 Qoder 中手动打开即可。可用 `QG_QODER_CLI` 指定 CLI 路径。
+- `-c` 调用 Codex 官方的 `codex app <目录>` 启动器打开工作区；未检测到 `codex`、CLI 版本过旧或桌面端启动失败时只警告，工作树仍会保留，可手动执行 `codex app <目录>`。
 - 工作树创建后自动挂载知识库（等价 `qg kb attach`）并生成 `AGENTS.local.md`；挂载失败只警告，工作树保留。
-- 多个旗标可以同时使用，例如 `qg wt feature/login -i -d -q`。
+- 多个旗标可以同时使用，例如 `qg wt feature/login -i -d -q -c`。
 
 #### DSH 插件（`qg-dsh-open`）
 
@@ -187,7 +192,14 @@ ls -l ~/.qg/dsh-bridge.json
 
 ### 知识库（`qg kb`）
 
-知识库放在仓库之外（默认仓库同级 `_ai-kb`，其次 `~/.ai-kb`），用符号链接挂进工作树：主工作树的 `.dsh` 直接指向基座；特性分支生成合成视图，技能按名字由分支覆盖基座，知识写入分支目录，基座作为只读参考。挂载物写进 git 的 `info/exclude`，对 git 不可见。
+知识库放在仓库之外（默认仓库同级 `_ai-kb`，其次 `~/.ai-kb`），并投影成 Codex、DSH、Qoder 都能自动读取的同一套工作区入口：
+
+- 根 `AGENTS.md`：Codex、DSH、Qoder 都会自动加载。
+- `.dsh/`：DSH 的技能、项目基座与分支知识视图。
+- `.agents/skills`：Codex 的项目技能发现入口。
+- `.qoder/skills`：Qoder 的项目技能发现入口。
+
+主工作树的 `AGENTS.md` 直接链接知识库基座；特性分支的 `AGENTS.md` 由 qg 合并“共享基座 + `AGENTS.local.md`”，因此三个 agent 会优先读到同一份项目知识，同时保留当前分支的需求与约束。挂载物写入 git 的 `info/exclude`，对 git 不可见。
 
 ```bash
 qg kb attach                 # 挂载当前工作树
@@ -195,9 +207,11 @@ qg kb attach ../feature-login # 挂载指定工作树
 qg kb status                 # 列出各工作树的挂载状态，不写文件
 ```
 
-- 挂载时创建 `AGENTS.md` 与 `.dsh` 链接；已存在的真实文件不覆盖，只告警。特性分支若已有非 qg 创建的真实 `.dsh` 目录，会拒绝覆盖并保留原内容。
+- 特性分支的根 `AGENTS.md` 是 qg 生成文件，不要直接编辑；共享内容写到 `_ai-kb` 基座，本分支内容写到 `AGENTS.local.md`，然后执行 `qg kb attach` 刷新。
+- 已存在的用户 `AGENTS.md`、非 qg 管理的 `.dsh`、外部 `.agents/skills` 或 `.qoder/skills` 不会被覆盖，只会告警或报错保留。
 - **缺失自动初始化**：全局层（`AGENTS.md`、`skills/`）或项目骨架（`AGENTS.md`、`skills/`、`knowledge/{journal,glossary}.md`）缺失时自动创建；整个知识库被删后，下次 `qg kb attach` 或 `qg wt` 会重建。
-- 全局层链接到 DSH 配置目录：`$DSH_HOME/AGENTS.md`、`$DSH_HOME/skills`（默认 `~/.dsh`）。已存在的真实文件或有效链接不动（指向别处时告警），悬空链接会被修复。
+- 全局层会接入 `$DSH_HOME`、`$CODEX_HOME` 与共享 `$AGENTS_HOME`：缺失、空文件或悬空链接指向 `_ai-kb`；已有非空用户配置不动。Codex 全局技能按单个技能名补进 `$CODEX_HOME/skills`，不会替换系统内置技能。
+- `qg kb status` 会分别显示 Codex、DSH、Qoder 的接入状态，并给出缺失的入口。
 - `qg rm` 删除分支时，若分支知识目录从未写入过，会一并清理。
 
 ### 快速分支同步（`qg gmt`）
@@ -457,8 +471,11 @@ qg from
 | `QG_SCRIPTS_DIR` | `qg run` 的脚本目录，默认 `~/.qg/scripts` |
 | `QG_DSH_BRIDGE` | `qg wt -d` 读取的 DSH 桥接文件，默认 `~/.qg/dsh-bridge.json` |
 | `QG_QODER_CLI` | `qg wt -q` 使用的 Qoder CLI 路径；缺省时查找 PATH 与常见安装目录 |
+| `QG_CODEX_CLI` | `qg wt -c` 使用的 Codex CLI 路径；缺省时查找 PATH、ChatGPT/Codex 应用内置路径 |
 | `AI_KB_ROOT` | 知识库根目录，默认仓库同级 `_ai-kb`，其次 `~/.ai-kb` |
 | `DSH_HOME` | DSH 配置目录，默认 `~/.dsh`；`qg kb` 把全局 `AGENTS.md` / `skills` 链接到这里 |
+| `CODEX_HOME` | Codex 配置目录，默认 `~/.codex`；qg 会接管空的 `AGENTS.md` 并补充全局技能 |
+| `AGENTS_HOME` / `DSH_AGENTS_HOME` | 跨 agent 共享配置目录，默认 `~/.agents`；用于共享 `AGENTS.md` 与技能 |
 
 ## 开发
 
@@ -504,6 +521,7 @@ internal/idea/           IntelliJ IDEA 检测与启动
 internal/workbuddy/      WorkBuddy 深链接
 internal/dsh/            通过 DSH Desktop 桥接创建并打开工作区
 internal/qoder/          通过 Qoder CLI / 应用打开工作树
+internal/codex/          通过 `codex app` 在 Codex Desktop 中打开工作树
 internal/llm/            LLM API 客户端（OpenAI 兼容 / Anthropic）
 internal/prompt/         commit message Prompt 构造
 internal/proc/           跨平台进程组管理（超时终止子进程树）
@@ -528,6 +546,10 @@ dsh-plugin/              qg-dsh-open：DSH Desktop 工作区桥接插件（Host 
 **`qg wt -q` 没有自动创建 Qoder 工作区**
 
 优先安装带 CLI 的 Qoder IDE（或把 `qoder` 加入 PATH / 设置 `QG_QODER_CLI`）。仅安装 Qoder Desktop 时 qg 只能唤起应用，桌面版当前不保证响应命令行目录参数，可在 Qoder 中手动打开输出的工作树路径。
+
+**`qg wt -c` 提示未找到 Codex CLI**
+
+安装 Codex Desktop 后确认 `codex --version` 可执行，或把 `QG_CODEX_CLI` 指向 Codex 安装包内的 `codex` 可执行文件。也可在工作树创建后手动执行 `codex app <工作树路径>`。
 
 **`qg wt -d` 提示未检测到 DSH 工作区桥接插件**
 

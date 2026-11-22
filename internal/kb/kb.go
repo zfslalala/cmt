@@ -7,8 +7,9 @@
 //
 // 主工作树直接指向基座，基座就是在主工作树上编辑的。特性分支挂载时在工作树里
 // 生成 .dsh 合成视图：技能按名字由分支覆盖基座，knowledge 指向分支目录，
-// base 指向基座作为只读参考。所有挂载物都写进 git 的 info/exclude，因此对
-// git 不可见，也不会被提交。
+// base 指向基座作为只读参考。同一份技能入口同时暴露给 Codex (.agents) 与
+// Qoder (.qoder)，工作树根 AGENTS.md 则合并基座与 AGENTS.local.md。
+// 所有挂载物都写进 git 的 info/exclude，因此对 git 不可见，也不会被提交。
 package kb
 
 import (
@@ -25,7 +26,7 @@ import (
 const (
 	// DshDir 是工作树里承载技能与知识的目录名。
 	DshDir = ".dsh"
-	// LocalNoteFile 是本工作树专属的说明文件，DSH 会把它叠加在 AGENTS.md 之后加载。
+	// LocalNoteFile 是本工作树专属的说明文件，会被合并进工作树根 AGENTS.md。
 	LocalNoteFile = "AGENTS.local.md"
 	// defaultRootName 是知识库的默认目录名，与仓库同级。
 	defaultRootName = "_ai-kb"
@@ -37,6 +38,12 @@ const (
 	projectKeyFile = "kb-project"
 	// managedMarker 标记 .dsh 目录由 qg 创建，可安全重建。
 	managedMarker = ".qg-managed"
+	// instructionsMarker 标记工作树根 AGENTS.md 由 qg 从知识库生成。
+	instructionsMarker = "<!-- qg-managed: agent-instructions -->"
+	// SharedAgentsDir 是 Codex 等项目级 agent 共享技能目录。
+	SharedAgentsDir = ".agents"
+	// QoderDir 是 Qoder 的项目规则与技能目录。
+	QoderDir = ".qoder"
 )
 
 // excludeEntries 会被写进 git 的 info/exclude，让挂载物对 git 不可见。
@@ -46,6 +53,8 @@ var excludeEntries = []string{
 	"/CLAUDE.md",
 	"/GEMINI.md",
 	"/.dsh",
+	"/.agents",
+	"/.qoder",
 	"/.trae",
 }
 
@@ -78,6 +87,21 @@ type Layout struct {
 // DshPath 返回工作树里 .dsh 的路径。
 func (l Layout) DshPath() string {
 	return filepath.Join(l.Worktree, DshDir)
+}
+
+// InstructionsPath 返回工作树根 AGENTS.md 的路径。
+func (l Layout) InstructionsPath() string {
+	return filepath.Join(l.Worktree, "AGENTS.md")
+}
+
+// CodexSkillsPath 返回 Codex 会发现的共享项目技能入口。
+func (l Layout) CodexSkillsPath() string {
+	return filepath.Join(l.Worktree, SharedAgentsDir, "skills")
+}
+
+// QoderSkillsPath 返回 Qoder 会发现的共享项目技能入口。
+func (l Layout) QoderSkillsPath() string {
+	return filepath.Join(l.Worktree, QoderDir, "skills")
 }
 
 // ProjectPath 返回该项目在知识库里的根目录。
@@ -263,10 +287,6 @@ func Attach(dir string) (Layout, error) {
 		}
 	}
 
-	if err := linkPath(filepath.Join(layout.Base, "AGENTS.md"), filepath.Join(layout.Worktree, "AGENTS.md"), &layout); err != nil {
-		return layout, err
-	}
-
 	if layout.IsMain {
 		// 主工作树直接使用基座：基座就是在主工作树上编辑的。
 		if err := linkPath(layout.Base, layout.DshPath(), &layout); err != nil {
@@ -276,6 +296,12 @@ func Attach(dir string) (Layout, error) {
 		return layout, err
 	}
 
+	if err := ensureAgentSkillLinks(&layout); err != nil {
+		return layout, err
+	}
+	if err := SyncWorktreeInstructions(&layout); err != nil {
+		return layout, err
+	}
 	if err := ensureExclude(layout); err != nil {
 		return layout, err
 	}
@@ -293,6 +319,12 @@ type WorktreeStatus struct {
 	IsMain bool
 	// Detail 是供人阅读的一句话说明。
 	Detail string
+	// Codex 表示 Codex 的指令与项目技能入口已就绪。
+	Codex bool
+	// DSH 表示 DSH 的 AGENTS.md 与 .dsh 合成视图已就绪。
+	DSH bool
+	// Qoder 表示 Qoder 的 AGENTS.md 与 .qoder/skills 已就绪。
+	Qoder bool
 }
 
 // Status 列出仓库全部工作树的挂载状态，不写任何文件。
@@ -314,23 +346,30 @@ func Status(dir string) ([]WorktreeStatus, string, error) {
 			IsMain: filepath.Clean(path) == layout.MainWorktree,
 		}
 
-		agents := filepath.Join(path, "AGENTS.md")
-		dsh := filepath.Join(path, DshDir)
-		agentsOK := isSymlink(agents) && pathExists(agents)
-		dshOK := pathExists(dsh)
-		item.Mounted = agentsOK && dshOK
+		instructions := instructionsStatus(path, layout.Base)
+		dshOK := pathExists(filepath.Join(path, DshDir))
+		codexSkillsOK := linkPointsTo(filepath.Join(path, SharedAgentsDir, "skills"), filepath.Join(path, DshDir, "skills"))
+		qoderSkillsOK := linkPointsTo(filepath.Join(path, QoderDir, "skills"), filepath.Join(path, DshDir, "skills"))
+		item.Codex = instructions && dshOK && codexSkillsOK
+		item.DSH = instructions && dshOK
+		item.Qoder = instructions && dshOK && qoderSkillsOK
+		item.Mounted = item.Codex && item.DSH && item.Qoder
 
 		switch {
-		case !agentsOK && !dshOK:
-			item.Detail = "未挂载"
-		case !agentsOK:
-			item.Detail = "缺少 AGENTS.md 链接"
+		case item.Mounted && item.IsMain:
+			item.Detail = "Codex / DSH / Qoder 已接入共享基座"
+		case item.Mounted:
+			item.Detail = "Codex / DSH / Qoder 已接入基座与分支说明"
+		case !instructions:
+			item.Detail = "AGENTS.md 未接管或不可用"
 		case !dshOK:
-			item.Detail = "缺少 .dsh"
-		case isSymlink(dsh):
-			item.Detail = "直接使用基座"
+			item.Detail = "缺少 .dsh 合成视图"
+		case !codexSkillsOK:
+			item.Detail = "缺少 .agents/skills 入口"
+		case !qoderSkillsOK:
+			item.Detail = "缺少 .qoder/skills 入口"
 		default:
-			item.Detail = "合成视图"
+			item.Detail = "部分接入"
 		}
 
 		items = append(items, item)
@@ -350,7 +389,31 @@ func DSHHome() string {
 	return ""
 }
 
-// ensureGlobal 补全知识库全局层，并把它挂到 DSH 的配置目录。
+// CodexHome 返回 Codex 的配置根目录：CODEX_HOME 优先，否则 ~/.codex。
+func CodexHome() string {
+	if value := strings.TrimSpace(os.Getenv("CODEX_HOME")); value != "" {
+		return value
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".codex")
+	}
+	return ""
+}
+
+// SharedAgentsHome 返回跨 agent 共享配置根目录。
+func SharedAgentsHome() string {
+	for _, name := range []string{"AGENTS_HOME", "DSH_AGENTS_HOME"} {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".agents")
+	}
+	return ""
+}
+
+// ensureGlobal 补全知识库全局层，并把它挂到 Codex、DSH 与共享 agents 配置目录。
 // 整个知识库被删掉后，任意一次 qg kb 操作都能把它重建回来。
 func ensureGlobal(layout *Layout) (bool, error) {
 	if layout.Root == "" {
@@ -375,22 +438,37 @@ func ensureGlobal(layout *Layout) (bool, error) {
 		created = true
 	}
 
-	home := DSHHome()
+	if err := ensureGlobalHome(layout, DSHHome(), agents, skills, true); err != nil {
+		return created, err
+	}
+	if err := ensureGlobalHome(layout, SharedAgentsHome(), agents, skills, false); err != nil {
+		return created, err
+	}
+	if err := ensureGlobalHome(layout, CodexHome(), agents, skills, false); err != nil {
+		return created, err
+	}
+	return created, nil
+}
+
+func ensureGlobalHome(layout *Layout, home, agents, skills string, linkSkills bool) error {
+	home = strings.TrimSpace(home)
 	if home == "" {
-		return created, nil
+		return nil
 	}
 	if err := os.MkdirAll(home, 0o755); err != nil {
-		return created, fmt.Errorf("创建 DSH 配置目录失败: %w", err)
+		return fmt.Errorf("创建 agent 配置目录 %s 失败: %w", home, err)
 	}
-
-	if err := linkIfAbsentOrDangling(agents, filepath.Join(home, "AGENTS.md"), layout); err != nil {
-		return created, err
+	if err := linkIfAbsentEmptyOrDangling(agents, filepath.Join(home, "AGENTS.md"), layout); err != nil {
+		return err
 	}
-	if err := linkIfAbsentOrDangling(skills, filepath.Join(home, "skills"), layout); err != nil {
-		return created, err
+	if linkSkills {
+		if err := linkIfAbsentOrDangling(skills, filepath.Join(home, "skills"), layout); err != nil {
+			return err
+		}
+		return nil
 	}
-
-	return created, nil
+	// Codex 的全局 skills 目录还可能包含系统内置技能，只补缺失的项目技能。
+	return linkSkillEntries(skills, filepath.Join(home, "skills"), layout)
 }
 
 // linkIfAbsentOrDangling 只在目标缺失、或是指向已消失目标的悬空链接时建立链接。
@@ -426,6 +504,63 @@ func linkIfAbsentOrDangling(src, dst string, layout *Layout) error {
 		return fmt.Errorf("创建全局链接失败: %w", err)
 	}
 
+	return nil
+}
+
+// linkIfAbsentEmptyOrDangling 额外允许接管内容为空的普通文件，
+// 用于 Codex 默认创建的空 ~/.codex/AGENTS.md。
+func linkIfAbsentEmptyOrDangling(src, dst string, layout *Layout) error {
+	info, err := os.Lstat(dst)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return fmt.Errorf("检查 %s 失败: %w", dst, err)
+	default:
+		if info.Mode()&os.ModeSymlink != 0 {
+			return linkIfAbsentOrDangling(src, dst, layout)
+		}
+		if info.Mode().IsRegular() && info.Size() == 0 {
+			if err := os.Remove(dst); err != nil {
+				return fmt.Errorf("移除空文件 %s 失败: %w", dst, err)
+			}
+			break
+		}
+		layout.Warnings = append(layout.Warnings, fmt.Sprintf("%s 已存在且不是空文件/符号链接，未覆盖", dst))
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+	if err := os.Symlink(src, dst); err != nil {
+		return fmt.Errorf("创建全局链接失败: %w", err)
+	}
+	return nil
+}
+
+// linkSkillEntries 把知识库中的单个技能链接进已有 skills 目录，
+// 避免覆盖目标目录里的系统或用户技能。
+func linkSkillEntries(srcDir, dstDir string, layout *Layout) error {
+	entries, err := os.ReadDir(srcDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("读取全局技能目录失败: %w", err)
+	}
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		return fmt.Errorf("创建全局技能目录失败: %w", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		src := filepath.Join(srcDir, entry.Name())
+		dst := filepath.Join(dstDir, entry.Name())
+		if err := linkIfAbsentOrDangling(src, dst, layout); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -590,6 +725,112 @@ func WriteLocalNote(layout Layout, content NoteContent) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// SyncWorktreeInstructions 刷新工作树根 AGENTS.md。
+// 主工作树直接链接基座；特性分支生成合并文件，保证 Codex、DSH、Qoder
+// 都能自动读到同一份共享基座与分支说明。
+func SyncWorktreeInstructions(layout *Layout) error {
+	if layout.IsMain {
+		return linkPath(filepath.Join(layout.Base, "AGENTS.md"), layout.InstructionsPath(), layout)
+	}
+	return writeManagedInstructions(layout)
+}
+
+func writeManagedInstructions(layout *Layout) error {
+	dst := layout.InstructionsPath()
+	baseAgents := filepath.Join(layout.Base, "AGENTS.md")
+
+	info, err := os.Lstat(dst)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return fmt.Errorf("检查 AGENTS.md 失败: %w", err)
+	case info.Mode()&os.ModeSymlink != 0:
+		target, err := resolvedLinkTarget(dst)
+		if err != nil {
+			return fmt.Errorf("读取 AGENTS.md 链接失败: %w", err)
+		}
+		if filepath.Clean(target) != filepath.Clean(baseAgents) {
+			layout.Warnings = append(layout.Warnings, fmt.Sprintf("%s 链接到别处（%s），未覆盖", dst, target))
+			return nil
+		}
+	case info.Mode().IsRegular():
+		data, err := os.ReadFile(dst)
+		if err != nil {
+			return fmt.Errorf("读取 AGENTS.md 失败: %w", err)
+		}
+		if !strings.Contains(string(data), instructionsMarker) {
+			layout.Warnings = append(layout.Warnings, fmt.Sprintf("%s 已存在且不是 qg 生成文件，未覆盖", dst))
+			return nil
+		}
+	default:
+		layout.Warnings = append(layout.Warnings, fmt.Sprintf("%s 已存在且不是普通文件，未覆盖", dst))
+		return nil
+	}
+
+	content, err := buildManagedInstructions(layout)
+	if err != nil {
+		return err
+	}
+	if pathExists(dst) {
+		if err := os.Remove(dst); err != nil {
+			return fmt.Errorf("移除旧 AGENTS.md 失败: %w", err)
+		}
+	}
+	if err := writeFileAtomic(dst, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("写入工作树 AGENTS.md 失败: %w", err)
+	}
+	return nil
+}
+
+func buildManagedInstructions(layout *Layout) (string, error) {
+	baseAgents := filepath.Join(layout.Base, "AGENTS.md")
+	baseContent, err := os.ReadFile(baseAgents)
+	if err != nil {
+		return "", fmt.Errorf("读取共享 AGENTS.md 失败: %w", err)
+	}
+
+	var b strings.Builder
+	b.WriteString(instructionsMarker)
+	b.WriteString("\n<!-- 由 qg 从 _ai-kb 自动生成，请勿直接编辑此文件。 -->\n")
+	b.WriteString("<!-- 修改共享基座后运行 `qg kb attach`；本工作树说明写在 AGENTS.local.md。 -->\n\n")
+	b.WriteString("<!-- source: ")
+	b.WriteString(baseAgents)
+	b.WriteString(" -->\n")
+	b.WriteString(strings.TrimSpace(string(baseContent)))
+	b.WriteString("\n")
+
+	localPath := filepath.Join(layout.Worktree, LocalNoteFile)
+	localContent, err := os.ReadFile(localPath)
+	switch {
+	case err == nil:
+		if text := strings.TrimSpace(string(localContent)); text != "" {
+			b.WriteString("\n\n<!-- source: ")
+			b.WriteString(localPath)
+			b.WriteString(" -->\n")
+			b.WriteString(text)
+			b.WriteString("\n")
+		}
+	case errors.Is(err, os.ErrNotExist):
+	default:
+		return "", fmt.Errorf("读取 %s 失败: %w", LocalNoteFile, err)
+	}
+	return b.String(), nil
+}
+
+// ensureAgentSkillLinks 把 .dsh/skills 暴露给 Codex 与 Qoder 的项目技能发现。
+func ensureAgentSkillLinks(layout *Layout) error {
+	src := filepath.Join(layout.DshPath(), "skills")
+	for _, dst := range []string{layout.CodexSkillsPath(), layout.QoderSkillsPath()} {
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return fmt.Errorf("创建 agent 技能目录 %s 失败: %w", filepath.Dir(dst), err)
+		}
+		if err := linkIfAbsentOrDangling(src, dst, layout); err != nil {
+			return fmt.Errorf("创建 agent 技能入口 %s 失败: %w", dst, err)
+		}
+	}
+	return nil
 }
 
 // CleanupBranchKnowledge 删除一个已结束分支的知识目录。
@@ -826,6 +1067,69 @@ func containsLine(content, target string) bool {
 		}
 	}
 	return false
+}
+
+func instructionsStatus(worktree, base string) bool {
+	path := filepath.Join(worktree, "AGENTS.md")
+	if !pathExists(path) {
+		return false
+	}
+	if isSymlink(path) {
+		target, err := resolvedLinkTarget(path)
+		return err == nil && filepath.Clean(target) == filepath.Clean(filepath.Join(base, "AGENTS.md"))
+	}
+	data, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(data), instructionsMarker)
+}
+
+func linkPointsTo(path, target string) bool {
+	if !pathExists(path) || !isSymlink(path) {
+		return false
+	}
+	got, err := resolvedLinkTarget(path)
+	if err != nil || filepath.Clean(got) != filepath.Clean(target) {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
+}
+
+func resolvedLinkTarget(path string) (string, error) {
+	target, err := os.Readlink(path)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	return filepath.Clean(target), nil
+}
+
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	file, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	temp := file.Name()
+	defer os.Remove(temp)
+
+	if err := file.Chmod(mode); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temp, path)
 }
 
 func isDir(path string) bool {

@@ -32,6 +32,7 @@ func runKbAttach(cmd *cobra.Command, args []string) error {
 	fmt.Printf("项目:   %s\n", layout.Project)
 	fmt.Printf("基座:   %s\n", layout.Base)
 	fmt.Printf("工作树: %s\n", layout.Worktree)
+	fmt.Println("已接入: Codex (.agents) / DSH (.dsh) / Qoder (.qoder)")
 
 	if layout.IsMain {
 		fmt.Println("模式:   主工作树，.dsh 直接指向基座")
@@ -61,8 +62,16 @@ func runKbStatus(cmd *cobra.Command, args []string) error {
 		if item.Mounted {
 			mark = "✓"
 		}
-		fmt.Printf("  %s %s    %s\n", mark, item.Path, item.Detail)
+		fmt.Printf("  %s %s    Codex:%s DSH:%s Qoder:%s    %s\n",
+			mark, item.Path, mountedSymbol(item.Codex), mountedSymbol(item.DSH), mountedSymbol(item.Qoder), item.Detail)
 	}
 
 	return nil
+}
+
+func mountedSymbol(ok bool) string {
+	if ok {
+		return "✓"
+	}
+	return "✗"
 }

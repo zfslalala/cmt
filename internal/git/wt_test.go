@@ -103,3 +103,48 @@ func TestCreateWorktreeFromSubdirectoryUsesRepoParent(t *testing.T) {
 		t.Fatalf("工作树路径 = %q，期望仓库同级 %q", path, want)
 	}
 }
+
+func TestCreateWorktreeRejectsLocalOnlyStartPoint(t *testing.T) {
+	repo := rmTestRepo(t)
+	runIn := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	runIn("branch", "local-only")
+	chdir(t, repo)
+
+	_, _, err := CreateWorktree("feat/local-only", "local-only")
+	if err == nil || !strings.Contains(err.Error(), "远程分支 origin/local-only 不存在") {
+		t.Fatalf("本地分支不应作为 --from 起点，实际错误: %v", err)
+	}
+	if branchExists("feat/local-only") {
+		t.Fatal("远程起点不存在时不应创建新分支")
+	}
+}
+
+func TestCreateWorktreeDoesNotFallbackOnRemoteCheckFailure(t *testing.T) {
+	repo := rmTestRepo(t)
+	runIn := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	runIn("branch", "release")
+	runIn("remote", "set-url", "origin", filepath.Join(t.TempDir(), "missing.git"))
+	chdir(t, repo)
+
+	_, _, err := CreateWorktree("feat/no-fallback", "release")
+	if err == nil || !strings.Contains(err.Error(), "检查远程分支 origin/release 失败") {
+		t.Fatalf("远程检查失败时应直接报错，实际: %v", err)
+	}
+	if branchExists("feat/no-fallback") {
+		t.Fatal("远程检查失败时不应创建新分支")
+	}
+}

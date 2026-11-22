@@ -78,7 +78,7 @@ func newRootCommand() *cobra.Command {
 	kbAttachCmd := &cobra.Command{
 		Use:           "attach [工作树路径]",
 		Short:         "把知识库挂载到工作树",
-		Long:          "在当前（或指定）工作树创建 AGENTS.md 与 .dsh 链接、合成技能视图，并把挂载物写入 git info/exclude。主工作树直接指向基座，特性分支使用合成视图。",
+		Long:          "在当前（或指定）工作树生成 Codex、DSH、Qoder 共用的 AGENTS.md 与技能入口，并把挂载物写入 git info/exclude。主工作树直接指向基座，特性分支合并基座与分支说明。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Args:          cobra.MaximumNArgs(1),
@@ -88,7 +88,7 @@ func newRootCommand() *cobra.Command {
 	kbStatusCmd := &cobra.Command{
 		Use:           "status",
 		Short:         "查看各工作树的挂载状态",
-		Long:          "列出当前仓库全部工作树是否已挂载知识库，不修改任何文件。",
+		Long:          "列出当前仓库全部工作树，并分别显示 Codex、DSH、Qoder 的知识库接入状态，不修改任何文件。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Args:          cobra.NoArgs,

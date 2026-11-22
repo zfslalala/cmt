@@ -16,6 +16,9 @@ func setup(t *testing.T) (string, string) {
 	if resolved, err := filepath.EvalSymlinks(parent); err == nil {
 		parent = resolved
 	}
+	t.Setenv("DSH_HOME", filepath.Join(parent, "dsh-home"))
+	t.Setenv("CODEX_HOME", filepath.Join(parent, "codex-home"))
+	t.Setenv("AGENTS_HOME", filepath.Join(parent, "agents-home"))
 
 	repo := filepath.Join(parent, "demo")
 	if err := os.MkdirAll(repo, 0o755); err != nil {
@@ -50,6 +53,13 @@ func setupKB(t *testing.T, parent, project string) (string, string) {
 	}
 	if err := os.WriteFile(filepath.Join(base, "skills", "arch", "SKILL.md"), []byte("---\nname: arch\n---\n"), 0o644); err != nil {
 		t.Fatalf("写入基座技能失败: %v", err)
+	}
+	globalSkill := filepath.Join(root, "skills", "knowledge-capture")
+	if err := os.MkdirAll(globalSkill, 0o755); err != nil {
+		t.Fatalf("创建全局技能失败: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(globalSkill, "SKILL.md"), []byte("---\nname: knowledge-capture\n---\n"), 0o644); err != nil {
+		t.Fatalf("写入全局技能失败: %v", err)
 	}
 
 	t.Setenv("AI_KB_ROOT", root)
@@ -104,6 +114,8 @@ func TestAttachMainWorktreeUsesBase(t *testing.T) {
 
 	assertLinkTarget(t, filepath.Join(repo, "AGENTS.md"), filepath.Join(base, "AGENTS.md"))
 	assertLinkTarget(t, filepath.Join(repo, DshDir), base)
+	assertLinkTarget(t, filepath.Join(os.Getenv("CODEX_HOME"), "skills", "knowledge-capture"), filepath.Join(layout.Root, "skills", "knowledge-capture"))
+	assertLinkTarget(t, filepath.Join(os.Getenv("AGENTS_HOME"), "skills", "knowledge-capture"), filepath.Join(layout.Root, "skills", "knowledge-capture"))
 }
 
 func TestAttachFeatureWorktreeSynthesizes(t *testing.T) {
@@ -144,6 +156,69 @@ func TestAttachFeatureWorktreeSynthesizes(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(branch, "knowledge", "journal.md")); err != nil {
 		t.Fatalf("缺少分支日志模板: %v", err)
+	}
+
+	assertLinkTarget(t, layout.CodexSkillsPath(), filepath.Join(worktree, DshDir, "skills"))
+	assertLinkTarget(t, layout.QoderSkillsPath(), filepath.Join(worktree, DshDir, "skills"))
+}
+
+func TestFeatureInstructionsMergeBaseAndLocalNote(t *testing.T) {
+	parent, repo := setup(t)
+	_, base := setupKB(t, parent, "demo")
+
+	worktree := filepath.Join(parent, "feat-x")
+	runGit(t, repo, "worktree", "add", "-q", "-b", "feat/x", worktree)
+
+	layout, err := Attach(worktree)
+	if err != nil {
+		t.Fatalf("挂载失败: %v", err)
+	}
+	if _, err := WriteLocalNote(layout, NoteContent{Branch: "feat/x", Note: "实现多 agent 知识库"}); err != nil {
+		t.Fatalf("写说明失败: %v", err)
+	}
+	if err := SyncWorktreeInstructions(&layout); err != nil {
+		t.Fatalf("同步 AGENTS.md 失败: %v", err)
+	}
+
+	agents := layout.InstructionsPath()
+	info, err := os.Lstat(agents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("特性分支 AGENTS.md 应为 qg 生成的普通文件")
+	}
+	data, err := os.ReadFile(agents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{instructionsMarker, "# demo", "实现多 agent 知识库", filepath.Join(base, "AGENTS.md")} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("合并后的 AGENTS.md 缺少 %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestFeatureInstructionsReplaceOldBaseLink(t *testing.T) {
+	parent, repo := setup(t)
+	_, base := setupKB(t, parent, "demo")
+
+	worktree := filepath.Join(parent, "feat-x")
+	runGit(t, repo, "worktree", "add", "-q", "-b", "feat/x", worktree)
+	if err := os.Symlink(filepath.Join(base, "AGENTS.md"), filepath.Join(worktree, "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	layout, err := Attach(worktree)
+	if err != nil {
+		t.Fatalf("挂载失败: %v", err)
+	}
+	if isSymlink(layout.InstructionsPath()) {
+		t.Fatal("旧版基座链接应升级为合并文件")
+	}
+	if !strings.Contains(readFile(t, layout.InstructionsPath()), instructionsMarker) {
+		t.Fatal("升级后的 AGENTS.md 缺少 qg 标记")
 	}
 }
 
@@ -284,6 +359,9 @@ func TestStatusReportsMountState(t *testing.T) {
 	if len(items) != 1 || items[0].Mounted {
 		t.Fatalf("挂载前应报告未挂载: %+v", items)
 	}
+	if items[0].Codex || items[0].DSH || items[0].Qoder {
+		t.Fatalf("挂载前三个 agent 都应未接入: %+v", items[0])
+	}
 
 	if _, err := Attach(repo); err != nil {
 		t.Fatalf("挂载失败: %v", err)
@@ -295,6 +373,9 @@ func TestStatusReportsMountState(t *testing.T) {
 	}
 	if len(items) != 1 || !items[0].Mounted {
 		t.Fatalf("挂载后应报告已挂载: %+v", items)
+	}
+	if !items[0].Codex || !items[0].DSH || !items[0].Qoder {
+		t.Fatalf("挂载后三个 agent 都应接入: %+v", items[0])
 	}
 }
 
@@ -492,6 +573,18 @@ func TestAttachRebuildsWholeKnowledgeBase(t *testing.T) {
 
 	assertLinkTarget(t, filepath.Join(home, "AGENTS.md"), filepath.Join(root, "AGENTS.md"))
 	assertLinkTarget(t, filepath.Join(home, "skills"), filepath.Join(root, "skills"))
+
+	codexHome := os.Getenv("CODEX_HOME")
+	assertLinkTarget(t, filepath.Join(codexHome, "AGENTS.md"), filepath.Join(root, "AGENTS.md"))
+	if !isDir(filepath.Join(codexHome, "skills")) {
+		t.Fatalf("Codex skills 目录未创建: %s", filepath.Join(codexHome, "skills"))
+	}
+
+	agentsHome := os.Getenv("AGENTS_HOME")
+	assertLinkTarget(t, filepath.Join(agentsHome, "AGENTS.md"), filepath.Join(root, "AGENTS.md"))
+	if !isDir(filepath.Join(agentsHome, "skills")) {
+		t.Fatalf("共享 agents skills 目录未创建: %s", filepath.Join(agentsHome, "skills"))
+	}
 }
 
 func TestAttachRepairsDanglingGlobalLinks(t *testing.T) {
@@ -550,4 +643,58 @@ func TestAttachDoesNotStealForeignGlobalFile(t *testing.T) {
 	if len(layout.Warnings) == 0 {
 		t.Fatalf("跳过的全局文件应产生警告")
 	}
+}
+
+func TestAttachReplacesEmptyCodexGlobalFile(t *testing.T) {
+	parent, repo := setup(t)
+	root := filepath.Join(parent, defaultRootName)
+	t.Setenv("AI_KB_ROOT", root)
+
+	codexHome := os.Getenv("CODEX_HOME")
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agents := filepath.Join(codexHome, "AGENTS.md")
+	if err := os.WriteFile(agents, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Attach(repo); err != nil {
+		t.Fatalf("挂载失败: %v", err)
+	}
+	assertLinkTarget(t, agents, filepath.Join(root, "AGENTS.md"))
+}
+
+func TestAttachKeepsForeignCodexGlobalFile(t *testing.T) {
+	parent, repo := setup(t)
+	t.Setenv("AI_KB_ROOT", filepath.Join(parent, defaultRootName))
+
+	codexHome := os.Getenv("CODEX_HOME")
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agents := filepath.Join(codexHome, "AGENTS.md")
+	if err := os.WriteFile(agents, []byte("# my codex rules\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	layout, err := Attach(repo)
+	if err != nil {
+		t.Fatalf("挂载失败: %v", err)
+	}
+	if got := readFile(t, agents); got != "# my codex rules\n" {
+		t.Fatalf("不应覆盖用户 Codex AGENTS.md: %q", got)
+	}
+	if len(layout.Warnings) == 0 {
+		t.Fatal("跳过的 Codex 全局文件应产生警告")
+	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读取 %s 失败: %v", path, err)
+	}
+	return string(data)
 }

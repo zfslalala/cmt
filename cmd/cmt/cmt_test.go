@@ -43,6 +43,9 @@ func setupRepo(t *testing.T) (string, string) {
 	if resolved, err := filepath.EvalSymlinks(parent); err == nil {
 		parent = resolved
 	}
+	t.Setenv("DSH_HOME", filepath.Join(parent, "dsh-home"))
+	t.Setenv("CODEX_HOME", filepath.Join(parent, "codex-home"))
+	t.Setenv("AGENTS_HOME", filepath.Join(parent, "agents-home"))
 
 	repo := filepath.Join(parent, "demo")
 	if err := os.MkdirAll(repo, 0o755); err != nil {
