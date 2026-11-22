@@ -515,7 +515,8 @@ cmd/cmt/                 命令实现（package cmt）
   rm.go                  删除分支与工作树
 internal/git/            Git 命令封装（状态、变更、worktree、分支同步、删除、reflog）
 internal/kb/             知识库挂载（符号链接、合成视图、骨架创建）
-internal/build/          qg.hjson 解析（cmt / builds / wt）、构建命令执行
+internal/projectconfig/  qg.hjson 定位与解析（cmt / builds / wt）
+internal/build/          构建命令执行
 internal/runner/         qg run 的脚本解析、编译与执行
 internal/idea/           IntelliJ IDEA 检测与启动
 internal/workbuddy/      WorkBuddy 深链接

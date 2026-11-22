@@ -7,11 +7,6 @@ import (
 
 const defaultRemote = "origin"
 
-type Worktree struct {
-	Path   string
-	Branch string
-}
-
 // MergeConflictError 表示合并产生冲突，失败的自动合并已被回滚。
 type MergeConflictError struct {
 	SourceBranch string
@@ -29,37 +24,6 @@ func (e *MergeConflictError) Error() string {
 
 func (e *MergeConflictError) Unwrap() error {
 	return e.Cause
-}
-
-// Worktrees 获取当前仓库的 worktree 列表
-func Worktrees() ([]Worktree, error) {
-	output, err := runGit("worktree", "list", "--porcelain")
-	if err != nil {
-		return nil, err
-	}
-
-	var worktrees []Worktree
-	var current Worktree
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		switch {
-		case line == "":
-			if current.Path != "" {
-				worktrees = append(worktrees, current)
-				current = Worktree{}
-			}
-		case strings.HasPrefix(line, "worktree "):
-			current.Path = strings.TrimPrefix(line, "worktree ")
-		case strings.HasPrefix(line, "branch refs/heads/"):
-			current.Branch = strings.TrimPrefix(line, "branch refs/heads/")
-		}
-	}
-
-	if current.Path != "" {
-		worktrees = append(worktrees, current)
-	}
-
-	return worktrees, nil
 }
 
 // WorktreePathForBranch 获取指定分支所在的 worktree 路径

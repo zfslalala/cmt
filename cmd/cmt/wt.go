@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zfslalala/cmt/internal/build"
 	"github.com/zfslalala/cmt/internal/codex"
 	"github.com/zfslalala/cmt/internal/dsh"
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/idea"
 	"github.com/zfslalala/cmt/internal/kb"
+	"github.com/zfslalala/cmt/internal/projectconfig"
 	"github.com/zfslalala/cmt/internal/qoder"
 	"github.com/zfslalala/cmt/internal/workbuddy"
 )
@@ -59,7 +59,7 @@ func runWt(branch string, opts wtOptions) error {
 	// 起点：--from 优先，其次 qg.hjson 的 wt.base，都为空则基于当前 HEAD
 	start := opts.from
 	if start == "" {
-		base, err := build.WorktreeBase()
+		base, err := projectconfig.WorktreeBase()
 		if err != nil {
 			return fmt.Errorf("读取工作树默认起点失败: %w", err)
 		}

@@ -59,7 +59,9 @@ func runKbStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("项目: %s\n", project)
 	for _, item := range items {
 		mark := "✗"
-		if item.Mounted {
+		if item.Prunable {
+			mark = "!"
+		} else if item.Mounted {
 			mark = "✓"
 		}
 		fmt.Printf("  %s %s    Codex:%s DSH:%s Qoder:%s    %s\n",

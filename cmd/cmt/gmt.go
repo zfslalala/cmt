@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zfslalala/cmt/internal/build"
 	"github.com/zfslalala/cmt/internal/git"
+	"github.com/zfslalala/cmt/internal/projectconfig"
 )
 
 type gmtOptions struct {
@@ -57,7 +58,7 @@ func runGMT(args []string, opts gmtOptions) error {
 // triggerBuilds 依次执行 qg.hjson 中目标分支的构建命令。
 // 单条失败仅警告并继续执行后续命令,不影响已完成的合并推送结果。
 func triggerBuilds(branch string) {
-	cfg, err := build.Load()
+	cfg, err := projectconfig.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "⚠ 读取 qg.hjson 失败: %v\n", err)
 		return

@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/zfslalala/cmt/internal/build"
 	"github.com/zfslalala/cmt/internal/git"
 	"github.com/zfslalala/cmt/internal/llm"
+	"github.com/zfslalala/cmt/internal/projectconfig"
 	"github.com/zfslalala/cmt/internal/prompt"
 	"github.com/zfslalala/cmt/pkg/config"
 )
@@ -123,7 +123,7 @@ func runCMT(cmd *cobra.Command, opts cmtOptions) error {
 // loadLLMConfig 从 qg.hjson 的 cmt 段读取大模型配置；未配置的 apiUrl / model
 // 用默认值补齐。apiKey 缺失时直接失败，并说明该改哪个文件。
 func loadLLMConfig() (*config.Config, error) {
-	projectCfg, err := build.Load()
+	projectCfg, err := projectconfig.Load()
 	if err != nil {
 		return nil, fmt.Errorf("读取 qg.hjson 失败: %w", err)
 	}
