@@ -7,11 +7,12 @@ import (
 
 // DeletedBranch 描述一次分支删除的结果
 type DeletedBranch struct {
-	Branch        string // 被删除的分支
-	WorktreePath  string // 一并删除的工作树路径，无则空
-	SwitchedTo    string // 删除前切换到的分支（分支检出于主仓库时），无则空
-	RemoteDeleted bool   // 是否成功删除远程分支
-	RemoteMessage string // 远程分支删除失败的警告信息
+	Branch         string // 被删除的分支
+	WorktreePath   string // 一并删除的工作树路径，无则空
+	WorktreePruned bool   // 工作树目录已丢失，只清理了 Git 管理记录
+	SwitchedTo     string // 删除前切换到的分支（分支检出于主仓库时），无则空
+	RemoteDeleted  bool   // 是否成功删除远程分支
+	RemoteMessage  string // 远程分支删除失败的警告信息
 }
 
 // DeleteBranch 删除本地分支；若分支检出于链接工作树则一并删除工作树。
@@ -51,32 +52,52 @@ func DeleteBranch(branch string, remote, force bool) (*DeletedBranch, error) {
 	}
 
 	// 分支所在的链接工作树（如有）
-	var wtPath string
+	var targetWorktree *Worktree
 	for _, wt := range wts[1:] {
 		if wt.Branch == branch {
-			wtPath = wt.Path
+			candidate := wt
+			targetWorktree = &candidate
 			break
 		}
 	}
 
-	// 删除链接工作树
-	if wtPath != "" {
-		hasChanges, err := hasUncommittedChangesInDir(wtPath)
-		if err != nil {
-			return nil, fmt.Errorf("检查工作树 %s 状态失败: %w", wtPath, err)
+	// 目录已丢失的 prunable 记录只能清理 Git 管理元数据，不能调用
+	// git worktree remove；目录仍存在时才走 Git 的安全删除流程。
+	wtPath := ""
+	if targetWorktree != nil {
+		if targetWorktree.Prunable {
+			if _, err := runGitInDir(mainWt.Path, "worktree", "prune", "--verbose"); err != nil {
+				return nil, fmt.Errorf("清理失效工作树记录失败: %w", err)
+			}
+			res.WorktreePath = targetWorktree.Path
+			res.WorktreePruned = true
+		} else {
+			wtPath = targetWorktree.Path
+			hasChanges, err := hasUncommittedChangesInDir(wtPath)
+			if err != nil {
+				return nil, fmt.Errorf("检查工作树 %s 状态失败: %w", wtPath, err)
+			}
+			if hasChanges && !force {
+				return nil, fmt.Errorf("工作树 %s 有未提交变更，请先处理或使用 --force 强制删除", wtPath)
+			}
+			if targetWorktree.Locked && !force {
+				return nil, fmt.Errorf("工作树 %s 已锁定，确认删除请使用 --force", wtPath)
+			}
+			if targetWorktree.Locked {
+				if _, err := runGitInDir(mainWt.Path, "worktree", "unlock", wtPath); err != nil {
+					return nil, fmt.Errorf("解锁工作树 %s 失败: %w", wtPath, err)
+				}
+			}
+			args := []string{"worktree", "remove"}
+			if force {
+				args = append(args, "--force")
+			}
+			args = append(args, wtPath)
+			if _, err := runGitInDir(mainWt.Path, args...); err != nil {
+				return nil, fmt.Errorf("删除工作树 %s 失败: %w", wtPath, err)
+			}
+			res.WorktreePath = wtPath
 		}
-		if hasChanges && !force {
-			return nil, fmt.Errorf("工作树 %s 有未提交变更，请先处理或使用 --force 强制删除", wtPath)
-		}
-		args := []string{"worktree", "remove"}
-		if force {
-			args = append(args, "--force")
-		}
-		args = append(args, wtPath)
-		if _, err := runGitInDir(mainWt.Path, args...); err != nil {
-			return nil, fmt.Errorf("删除工作树 %s 失败: %w", wtPath, err)
-		}
-		res.WorktreePath = wtPath
 	}
 
 	// 删除本地分支（-d 拒绝未合并分支，防止丢代码；--force 升级为 -D）

@@ -3,6 +3,7 @@ package git
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -113,6 +114,46 @@ func TestDeleteBranchWithWorktree(t *testing.T) {
 	}
 	if branchExists("feat/wt") {
 		t.Error("分支未被删除")
+	}
+}
+
+func TestDeleteBranchWithPrunableWorktree(t *testing.T) {
+	repo := rmTestRepo(t)
+	runIn := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+
+	wtPath := repo + "/../feat-prunable"
+	runIn("worktree", "add", "-q", "-b", "feat/prunable", wtPath)
+	if err := os.RemoveAll(wtPath); err != nil {
+		t.Fatal(err)
+	}
+
+	chdir(t, repo)
+	res, err := DeleteBranch("feat/prunable", false, false)
+	if err != nil {
+		t.Fatalf("DeleteBranch: %v", err)
+	}
+	if !res.WorktreePruned || filepath.Base(res.WorktreePath) != filepath.Base(wtPath) {
+		t.Fatalf("应报告清理失效工作树记录，实际: %+v", res)
+	}
+	if branchExists("feat/prunable") {
+		t.Fatal("失效工作树对应的已合并分支应被删除")
+	}
+
+	worktrees, err := WorktreesIn(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, wt := range worktrees {
+		if wt.Path == wtPath {
+			t.Fatalf("失效工作树元数据仍存在: %+v", wt)
+		}
 	}
 }
 

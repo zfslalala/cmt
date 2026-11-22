@@ -20,14 +20,14 @@ type rmOptions struct {
 func newRMCommand() *cobra.Command {
 	opts := rmOptions{}
 	cmd := &cobra.Command{
-		Use:           "rm",
-		Short:         "删除当前分支、工作树及 DSH 工作区",
-		Long:          "删除当前所在分支，若分支检出于工作树则一并删除工作树及对应 DSH 工作区，主仓库自动切回默认分支。-o 同时删除远程同名分支，--force 强制跳过脏工作树与未合并检查。",
+		Use:           "rm [branch]",
+		Short:         "删除当前或指定分支、工作树及 DSH 工作区",
+		Long:          "不传分支名时删除当前分支；传入分支名时删除指定分支。若分支检出于工作树则一并删除工作树及对应 DSH 工作区，失效工作树会先清理 Git 元数据。-o 同时删除远程同名分支，--force 强制跳过脏工作树与未合并检查。",
 		SilenceErrors: true,
 		SilenceUsage:  true,
-		Args:          cobra.NoArgs,
+		Args:          cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRm(opts)
+			return runRm(opts, args)
 		},
 	}
 	cmd.Flags().BoolVarP(&opts.remote, "origin", "o", false, "同时删除远程 origin 上的同名分支")
@@ -35,15 +35,24 @@ func newRMCommand() *cobra.Command {
 	return cmd
 }
 
-// runRm 删除当前所在分支，检出于工作树则一并删除
-func runRm(opts rmOptions) error {
+// runRm 删除当前分支；传入参数时删除指定分支。
+func runRm(opts rmOptions, args []string) error {
 	if !git.IsGitRepo() {
 		return fmt.Errorf("当前目录不是 Git 仓库")
 	}
 
-	branch, err := git.CurrentBranch()
-	if err != nil {
-		return err
+	branch := ""
+	if len(args) > 0 {
+		branch = strings.TrimSpace(args[0])
+		if branch == "" {
+			return fmt.Errorf("分支名不能为空")
+		}
+	} else {
+		current, err := git.CurrentBranch()
+		if err != nil {
+			return err
+		}
+		branch = current
 	}
 
 	// 远程删除不可逆，显式确认
@@ -56,11 +65,15 @@ func runRm(opts rmOptions) error {
 		}
 	}
 
-	// 先记下分支知识目录：工作树删掉后就无法再从目录反查它属于哪个分支。
+	// 先记下指定分支对应工作树的知识目录：工作树删掉后就无法再反查。
 	var kbLayout kb.Layout
 	hasKB := false
-	if layout, layoutErr := kb.Resolve("."); layoutErr == nil && !layout.IsMain {
-		kbLayout, hasKB = layout, true
+	if worktreePath, ok, layoutErr := git.WorktreePathForBranch(branch); layoutErr != nil {
+		return layoutErr
+	} else if ok {
+		if layout, resolveErr := kb.Resolve(worktreePath); resolveErr == nil && !layout.IsMain {
+			kbLayout, hasKB = layout, true
+		}
 	}
 
 	res, err := git.DeleteBranch(branch, opts.remote, opts.force)
@@ -71,7 +84,9 @@ func runRm(opts rmOptions) error {
 	if res.SwitchedTo != "" {
 		fmt.Printf("已切换到分支: %s\n", res.SwitchedTo)
 	}
-	if res.WorktreePath != "" {
+	if res.WorktreePruned {
+		fmt.Printf("已清理失效工作树记录: %s\n", res.WorktreePath)
+	} else if res.WorktreePath != "" {
 		fmt.Printf("已删除工作树: %s\n", res.WorktreePath)
 		fmt.Println("（若当前终端位于被删目录内，请先 cd 出来）")
 	}
